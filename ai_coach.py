@@ -90,21 +90,59 @@ Devuelve ÚNICAMENTE un JSON válido sin texto adicional, con esta estructura ex
 }
 """
 
-PRACTICE_PROMPTS = {
-    "anderson": [
-        {"title": "IELTS Academic Task 2: Quantum Computing", "prompt": "Some researchers argue that quantum computing will render traditional cryptography obsolete. Discuss the implications for scientific communication."},
-        {"title": "IELTS Academic Task 1: Thermodynamic Process", "prompt": "Describe an experiment measuring the thermal conductivity of a material under low temperatures."},
-        {"title": "Speaking Part 3: Research Methodology", "prompt": "Explain why peer review remains the cornerstone of modern scientific discovery, despite its known limitations."},
-        {"title": "Personal Statement Hook", "prompt": "Write a 150-word introduction explaining your intellectual curiosity regarding condensed matter physics or theoretical physics."}
-    ],
-    "novia": [
-        {"title": "✈️ El viaje de mis sueños", "prompt": "Tell me about a city or country you would love to visit with your partner. What places would you see and what food would you try?"},
-        {"title": "☕ Mi día perfecto de descanso", "prompt": "Describe your ideal Sunday from morning to night. What makes you feel relaxed and happy?"},
-        {"title": "🎬 Película o serie favorita", "prompt": "What is a movie or series you really enjoyed lately? Who was your favorite character and why?"},
-        {"title": "💼 Presentación en una reunión", "prompt": "Introduce yourself briefly: what you do, what you are passionate about, and what goals you have this year."},
-        {"title": "🍔 Pidiendo en un restaurante en el extranjero", "prompt": "Imagine you are in a restaurant in New York. Order your favorite meal, ask about dessert, and ask for the bill."}
-    ]
-}
+def get_prompts_for_user(user_profile: dict) -> list:
+    track = user_profile.get("track", "conversational")
+    interests = user_profile.get("interests", [])
+    
+    if track == "academic":
+        return [
+            {"title": "🔬 Debate Científico: Avances Tecnológicos", "prompt": "Discuss the socio-economic and ethical impacts of quantum computing or artificial intelligence on scientific research."},
+            {"title": "📊 IELTS Task 1: Análisis Experimental", "prompt": "Describe an experimental procedure to measure heat dissipation in a closed thermodynamic system."},
+            {"title": "🎙️ Speaking Part 3: El Método Científico", "prompt": "Explain why peer-reviewed papers are essential for technological progress and what flaws the current system has."},
+            {"title": "📝 Statement of Purpose Hook", "prompt": "Write a 120-word introductory statement highlighting your core academic motivation for graduate studies in physics/engineering."}
+        ]
+    elif track == "business":
+        return [
+            {"title": "💼 Elevating your Pitch", "prompt": "Give a 2-minute elevator pitch introducing a new project or startup idea to prospective investors."},
+            {"title": "📧 Cold Outreach Email", "prompt": "Write a concise, polite email proposing a business partnership or requesting a 15-minute introductory call."},
+            {"title": "🎯 Entrevista: Situación Difícil", "prompt": "Answer the classic interview question: 'Tell me about a time you handled a disagreement with a team member.'"},
+            {"title": "🤝 Negociación de Presupuesto", "prompt": "State your argument for why your department requires a higher quarterly budget to achieve its goals."}
+        ]
+    elif track == "travel":
+        return [
+            {"title": "✈️ En el Control Migratorio", "prompt": "Practice answering the border officer: purpose of your visit, length of stay, and where you will be lodging."},
+            {"title": "🏨 Resolviendo un Problema en el Hotel", "prompt": "Explain politely to reception that your room has no hot water and request a room change."},
+            {"title": "🗺️ Pidiendo Recomendaciones Locales", "prompt": "Ask a local barista about secret spots, authentic food, and places not flooded with tourists."},
+            {"title": "🍕 Ordenando Comida en un Café", "prompt": "Order your meal with dietary preferences (e.g. oat milk, dressing on the side) and ask for the check."}
+        ]
+    else:
+        return [
+            {"title": "☕ Mi día a día & Rutinas", "prompt": "Describe your ideal relaxing morning. What are the small habits that make your day feel good?"},
+            {"title": "🎬 Película, Serie o Libro Favorito", "prompt": "Talk about a movie, series, or song that had a big emotional impact on you recently and why."},
+            {"title": "✈️ El Viaje Soñado", "prompt": "If you could pack your bags and fly to any destination tomorrow, where would you go and what would you do first?"},
+            {"title": "🍕 Comida Favorita y Restaurantes", "prompt": "Describe your all-time favorite meal as if you were recommending it to a dear friend."}
+        ]
+
+def generate_ai_prompt_for_interests(user_profile: dict) -> dict:
+    interests = user_profile.get("interests", ["vida diaria", "viajes"])
+    user_name = user_profile.get("display_name", "Estudiante")
+    track = user_profile.get("role_title", "Inglés general")
+    
+    prompt = (
+        f"Genera una consigna de práctica de inglés corta, atractiva y moderna para {user_name}.\n"
+        f"Su enfoque es: {track}.\n"
+        f"Sus temas de interés son: {', '.join(interests)}.\n"
+        f"Devuelve ÚNICAMENTE un JSON con este formato:\n"
+        f"{{\"title\": \"Título corto con emoji\", \"prompt\": \"Instrucción en inglés clara (2 a 3 oraciones)\", \"tip_es\": \"Consejo breve en español de qué vocabulario usar\"}}"
+    )
+    try:
+        return call_gemini_api(prompt)
+    except Exception:
+        return {
+            "title": "✨ Tema Personalizado",
+            "prompt": f"Write about how {interests[0] if interests else 'your favorite hobby'} inspires your personal growth.",
+            "tip_es": "Usa conectores como 'in addition', 'on the other hand' o 'especially'."
+        }
 
 def clean_json_text(text: str) -> str:
     clean = text.strip()

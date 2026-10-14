@@ -16,20 +16,20 @@ Aplicación web interactiva y personalizada para que Anderson y Tania aprendan i
   * Enfoque en la vida real: viajes, restaurantes, series, trabajo, anécdotas y conversación fluida.
   * Tutora IA empática que explica errores en español sencillo, sugiere cómo diría las cosas un hablante nativo y propone mini-retos motivadores.
 
-### 2. 💑 Resumen de Pareja (Dashboard)
-* Horas acumuladas en equipo.
-* Racha de días seguidos de estudio (streaks 🔥).
-* Gráfica comparativa de los últimos 7 días.
-* Seguimiento de fases de aprendizaje para cada uno.
+### 2. 🔐 Sistema de Usuarios & Jerarquía (3 Niveles)
+* **👑 Administrador (Anderson):** Acceso total al panel de administración, control de configuraciones del sistema, restablecimiento de contraseñas de invitados y gestión de cuentas.
+* **💖 Co-administradora (Tania):** Acceso al espacio de estudio, resumen de pareja, personalización de metas y gustos propios.
+* **🌟 Invitados / Amigos:** Pueden crear su propia cuenta desde la pantalla principal, elegir su enfoque (Negocios, Viajes, Conversación), registrar sus horas, personalizar sus gustos y usar el evaluador de IA sin ver las configuraciones de administración.
 
-### 3. ⏱️ Centro de Estudio & Cronómetro
-* Cronómetro interactivo por bloques (Pomodoro 20, 25, 45 min).
-* Registro manual rápido de minutos para estudios en el celular (podcasts, YouTube, Duolingo, lectura).
+### 3. 💑 Resumen de Pareja (Dashboard Privado)
+* Exclusivo para Anderson y Tania: horas acumuladas en equipo, rachas y comparativas.
 
-### 4. 🤖 Evaluador Inteligente Gemini
-* Corrige textos de Writing o transcripciones de Speaking al instante.
-* Detecta errores gramaticales con explicaciones amigables.
-* Reescribe tu texto completo en una versión limpia y elegante.
+### 4. ⏱️ Centro de Estudio & Cronómetro
+* Cronómetro interactivo por bloques y registro manual rápido.
+
+### 5. 🤖 Evaluador Gemini IA Personalizado
+* Generador dinámico de temas según los gustos e intereses de cada usuario (Cine, Tecnología, Viajes, etc.).
+* Correcciones instantáneas y explicaciones amigables.
 
 ---
 

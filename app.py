@@ -10,24 +10,28 @@ import plotly.graph_objects as go
 from users_manager import (
     load_couple_data,
     save_couple_data,
+    authenticate_user,
+    register_guest,
+    update_user_profile,
+    change_user_password,
+    admin_delete_user,
     log_user_session,
     log_user_evaluation,
-    update_user_name,
     get_current_phase_for_user,
     calculate_streak,
-    DEFAULT_PROFILES
+    AVAILABLE_TRACKS
 )
-from ai_coach import evaluate_with_ai, PRACTICE_PROMPTS
+from ai_coach import evaluate_with_ai, get_prompts_for_user, generate_ai_prompt_for_interests
 
 # Configuración de página
 st.set_page_config(
-    page_title="English Accelerator • Pareja",
+    page_title="English Accelerator • Anderson, Tania & Friends",
     page_icon="🇬🇧",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-# Estilos CSS personalizados para una interfaz moderna, limpia y romántica/profesional
+# Estilos CSS
 st.markdown("""
 <style>
     .main-header {
@@ -38,26 +42,16 @@ st.markdown("""
         margin-bottom: 1.5rem;
         box-shadow: 0 10px 25px -5px rgba(79, 70, 229, 0.2);
     }
-    .metric-card {
-        background: rgba(255, 255, 255, 0.05);
-        border: 1px solid rgba(255, 255, 255, 0.1);
-        border-radius: 12px;
-        padding: 1.2rem;
-        text-align: center;
-        backdrop-filter: blur(10px);
-    }
-    .stButton>button {
-        border-radius: 10px;
-        font-weight: 600;
-        transition: all 0.2s ease;
-    }
-    .user-badge {
+    .user-pill {
         display: inline-block;
-        padding: 0.35rem 0.8rem;
-        border-radius: 20px;
+        padding: 0.25rem 0.75rem;
+        border-radius: 9999px;
         font-weight: 600;
         font-size: 0.85rem;
     }
+    .badge-admin { background: #fee2e2; color: #991b1b; }
+    .badge-partner { background: #fce7f3; color: #9d174d; }
+    .badge-guest { background: #e0e7ff; color: #3730a3; }
     .praise-box {
         background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%);
         border-left: 5px solid #10b981;
@@ -69,120 +63,212 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# Cargar datos
+# Inicializar sesión de autenticación
+if "auth_user_id" not in st.session_state:
+    st.session_state["auth_user_id"] = None
+
 data = load_couple_data()
 users = data.get("users", {})
 
-# Sidebar: Selector de Usuario y Navegación
-with st.sidebar:
-    st.markdown("### 👥 ¿Quién está practicando?")
-    
-    user_keys = list(users.keys())
-    user_labels = {
-        k: f"{users[k].get('emoji', '👤')} {users[k].get('display_name', k)}"
-        for k in user_keys
-    }
-    
-    # Mantener selección en estado de sesión
-    if "current_user_id" not in st.session_state:
-        st.session_state["current_user_id"] = "anderson"
-        
-    selected_uid = st.selectbox(
-        "Seleccionar Perfil:",
-        options=user_keys,
-        format_func=lambda k: user_labels[k],
-        index=user_keys.index(st.session_state["current_user_id"]) if st.session_state["current_user_id"] in user_keys else 0
-    )
-    st.session_state["current_user_id"] = selected_uid
-    
-    curr_user = users[selected_uid]
-    
-    st.markdown("---")
-    st.caption(f"**Enfoque de {curr_user.get('display_name')}:**")
-    st.info(f"🎯 **{curr_user.get('role_title')}**\n\nMeta: {curr_user.get('target_hours'):.0f} h | Nivel: {curr_user.get('cefr_target')}")
-    
-    st.markdown("---")
-    menu = st.radio(
-        "Menú Principal",
-        [
-            "💑 Resumen de Pareja",
-            "⏱️ Cronómetro & Estudio",
-            "🤖 Evaluador Gemini IA",
-            "📚 Biblioteca de Temas",
-            "⚙️ Configuración"
-        ]
-    )
-    
-    st.markdown("---")
-    # Racha activa
-    streak = calculate_streak(curr_user.get("sessions", []))
-    st.metric(f"Racha de {curr_user.get('display_name')}", f"{streak} días 🔥")
+# ==============================================================================
+# PANTALLA DE LOGIN / REGISTRO SI NO ESTÁ AUTENTICADO
+# ==============================================================================
+if not st.session_state["auth_user_id"] or st.session_state["auth_user_id"] not in users:
+    c_left, c_center, c_right = st.columns([1, 2, 1])
+    with c_center:
+        st.markdown("""
+        <div style="text-align: center; margin-top: 2rem; margin-bottom: 1.5rem;">
+            <h1 style="font-size: 2.5rem; margin-bottom: 0.2rem;">🇬🇧 English Accelerator</h1>
+            <p style="color: #9ca3af; font-size: 1.1rem;">Plataforma de estudio para Anderson, Tania y Amigos</p>
+        </div>
+        """, unsafe_allow_html=True)
+
+        announcement = data.get("system_config", {}).get("announcement")
+        if announcement:
+            st.info(f"📢 **Aviso:** {announcement}")
+
+        tab_login, tab_register = st.tabs(["🔑 Iniciar Sesión", "📝 Registrarse como Invitado"])
+
+        # TAB LOGIN
+        with tab_login:
+            st.subheader("Acceso a tu Espacio")
+            with st.form("login_form"):
+                uname = st.text_input("Usuario:", placeholder="ej. anderson, tania o tu_usuario")
+                pword = st.text_input("Contraseña:", type="password")
+                submit_login = st.form_submit_button("Entrar a la Plataforma", use_container_width=True, type="primary")
+
+                if submit_login:
+                    auth_u = authenticate_user(uname, pword)
+                    if auth_u:
+                        st.session_state["auth_user_id"] = auth_u["id"]
+                        st.success(f"¡Bienvenido/a de nuevo, {auth_u.get('display_name')}!")
+                        time.sleep(0.5)
+                        st.rerun()
+                    else:
+                        st.error("Usuario o contraseña incorrectos. Por favor verifica.")
+
+            st.caption("💡 **Cuentas principales:** Anderson y Tania tienen sus cuentas de acceso preconfiguradas.")
+
+        # TAB REGISTER
+        with tab_register:
+            st.subheader("Crear Cuenta de Invitado / Amigo")
+            st.write("Crea tu cuenta para practicar con el cronómetro, recibir correcciones de Gemini IA y guardar tu progreso.")
+            
+            with st.form("register_form"):
+                reg_name = st.text_input("Tu Nombre:", placeholder="Ej. Carlos, Andrea, etc.")
+                reg_uname = st.text_input("Nombre de Usuario (para iniciar sesión):", placeholder="ej. carlos24")
+                reg_pword = st.text_input("Contraseña:", type="password")
+                reg_pword_confirm = st.text_input("Confirmar Contraseña:", type="password")
+                
+                reg_track = st.selectbox(
+                    "¿Cuál es tu enfoque principal de inglés?",
+                    options=list(AVAILABLE_TRACKS.keys()),
+                    format_func=lambda k: f"{AVAILABLE_TRACKS[k]['title']}"
+                )
+                
+                reg_target = st.number_input("Meta de horas totales de práctica:", min_value=10.0, max_value=1000.0, value=100.0, step=25.0)
+                
+                st.write("**Selecciona tus temas de interés (para que la IA te dé temas que te gusten):**")
+                all_interests = ["Viajes & Turismo", "Cine & Series", "Trabajo & Negocios", "Música & Cultura", "Tecnología & Programación", "Gastronomía", "Deportes & Fitness", "Ciencia"]
+                selected_interests = []
+                cols_int = st.columns(2)
+                for idx, interest in enumerate(all_interests):
+                    col = cols_int[idx % 2]
+                    if col.checkbox(interest, value=(idx < 3), key=f"reg_int_{idx}"):
+                        selected_interests.append(interest)
+                
+                submit_reg = st.form_submit_button("Crear Mi Cuenta", use_container_width=True)
+                if submit_reg:
+                    if reg_pword != reg_pword_confirm:
+                        st.error("Las contraseñas no coinciden.")
+                    else:
+                        ok, msg = register_guest(
+                            reg_uname,
+                            reg_pword,
+                            reg_name,
+                            reg_track,
+                            reg_target,
+                            selected_interests
+                        )
+                        if ok:
+                            st.success(msg)
+                            time.sleep(1.5)
+                            # Auto-login
+                            new_u = authenticate_user(reg_uname, reg_pword)
+                            if new_u:
+                                st.session_state["auth_user_id"] = new_u["id"]
+                                st.rerun()
+                        else:
+                            st.error(msg)
+    st.stop()
 
 # ==============================================================================
-# PANTALLA 1: RESUMEN DE PAREJA (COUPLE DASHBOARD)
+# USUARIO AUTENTICADO
 # ==============================================================================
-if menu == "💑 Resumen de Pareja":
+curr_user = users[st.session_state["auth_user_id"]]
+role = curr_user.get("role", "guest")
+is_admin = (role == "admin")
+is_partner = (role == "partner")
+is_couple = is_admin or is_partner
+
+# Sidebar
+with st.sidebar:
+    st.markdown(f"### {curr_user.get('emoji', '👤')} {curr_user.get('display_name')}")
+    if is_admin:
+        st.markdown('<span class="user-pill badge-admin">👑 Administrador (Anderson)</span>', unsafe_allow_html=True)
+    elif is_partner:
+        st.markdown('<span class="user-pill badge-partner">💖 Co-administradora (Tania)</span>', unsafe_allow_html=True)
+    else:
+        st.markdown('<span class="user-pill badge-guest">🌟 Invitado / Amigo</span>', unsafe_allow_html=True)
+
+    st.caption(f"**Enfoque:** {curr_user.get('role_title', 'General')}")
+    st.caption(f"🎯 Meta: {curr_user.get('total_hours', 0.0):.1f} / {curr_user.get('target_hours', 100):.0f} h")
+    st.markdown("---")
+
+    # Opciones de menú según el rol
+    menu_options = []
+    if is_couple:
+        menu_options.append("💑 Resumen de Pareja (Anderson & Tania)")
+    else:
+        menu_options.append("📊 Mi Progreso Personal")
+
+    menu_options.extend([
+        "⏱️ Mi Estudio & Cronómetro",
+        "🤖 Evaluador Gemini IA",
+        "📚 Biblioteca de Temas",
+        "👤 Mi Perfil & Gustos"
+    ])
+
+    if is_admin:
+        menu_options.append("🛠️ Panel de Administración")
+
+    menu = st.radio("Navegación:", menu_options)
+
+    st.markdown("---")
+    streak = calculate_streak(curr_user.get("sessions", []))
+    st.metric("Tu Racha Actual", f"{streak} días 🔥")
+
+    if st.button("🚪 Cerrar Sesión", use_container_width=True):
+        st.session_state["auth_user_id"] = None
+        st.rerun()
+
+# ==============================================================================
+# PANTALLA 1A: RESUMEN DE PAREJA (SOLO ANDERSON Y TANIA)
+# ==============================================================================
+if menu == "💑 Resumen de Pareja (Anderson & Tania)":
     st.markdown("""
     <div class="main-header">
         <h1 style="margin:0; font-size: 2.2rem;">💑 English Together: Anderson & Tania</h1>
         <p style="margin-top:0.4rem; opacity:0.9; font-size: 1.1rem;">
-            Acompañándose paso a paso para dominar el inglés, cada uno a su propio ritmo.
+            Espacio privado para avanzar juntos, medir sus horas y celebrar cada logro.
         </p>
     </div>
     """, unsafe_allow_html=True)
-    
-    u_anderson = users.get("anderson", {})
-    u_novia = users.get("novia", {})
-    
-    total_couple_hours = u_anderson.get("total_hours", 0.0) + u_novia.get("total_hours", 0.0)
-    streak_anderson = calculate_streak(u_anderson.get("sessions", []))
-    streak_novia = calculate_streak(u_novia.get("sessions", []))
-    
-    c1, c2, c3 = st.columns(3)
-    with c1:
-        st.metric("⏳ Horas Totales en Pareja", f"{total_couple_hours:.1f} h")
-    with c2:
-        st.metric(f"🔥 Racha de {u_anderson.get('display_name')}", f"{streak_anderson} días")
-    with c3:
-        st.metric(f"✨ Racha de {u_novia.get('display_name')}", f"{streak_novia} días")
-        
-    st.markdown("### 📊 Progreso Individual")
-    col_a, col_b = st.columns(2)
-    
-    # Tarjeta Anderson
-    with col_a:
-        st.subheader(f"{u_anderson.get('emoji')} {u_anderson.get('display_name')}")
-        st.caption(f"**Ruta:** {u_anderson.get('role_title')}")
-        h_and = u_anderson.get("total_hours", 0.0)
-        target_and = u_anderson.get("target_hours", 700.0)
-        pct_and = min(100.0, (h_and / target_and) * 100.0) if target_and > 0 else 0
-        st.progress(pct_and / 100.0)
-        st.write(f"**{h_and:.1f}** / {target_and:.0f} horas ({pct_and:.1f}%)")
-        
-        phase_and = get_current_phase_for_user(u_anderson)
-        st.info(f"📍 **{phase_and.get('name')}**\n\n_{phase_and.get('focus')}_")
-        
-    # Tarjeta Novia
-    with col_b:
-        st.subheader(f"{u_novia.get('emoji')} {u_novia.get('display_name')}")
-        st.caption(f"**Ruta:** {u_novia.get('role_title')}")
-        h_nov = u_novia.get("total_hours", 0.0)
-        target_nov = u_novia.get("target_hours", 200.0)
-        pct_nov = min(100.0, (h_nov / target_nov) * 100.0) if target_nov > 0 else 0
-        st.progress(pct_nov / 100.0)
-        st.write(f"**{h_nov:.1f}** / {target_nov:.0f} horas ({pct_nov:.1f}%)")
-        
-        phase_nov = get_current_phase_for_user(u_novia)
-        st.success(f"📍 **{phase_nov.get('name')}**\n\n_{phase_nov.get('focus')}_")
 
+    u_and = users.get("anderson", {})
+    u_tan = users.get("tania", {})
+
+    total_couple_hours = u_and.get("total_hours", 0.0) + u_tan.get("total_hours", 0.0)
+    streak_and = calculate_streak(u_and.get("sessions", []))
+    streak_tan = calculate_streak(u_tan.get("sessions", []))
+
+    c1, c2, c3 = st.columns(3)
+    c1.metric("⏳ Horas Totales en Pareja", f"{total_couple_hours:.1f} h")
+    c2.metric(f"🔬 Racha de {u_and.get('display_name', 'Anderson')}", f"{streak_and} días 🔥")
+    c3.metric(f"✨ Racha de {u_tan.get('display_name', 'Tania')}", f"{streak_tan} días 🔥")
+
+    st.markdown("### 📊 Progreso de Ambos")
+    col_a, col_b = st.columns(2)
+
+    with col_a:
+        st.subheader(f"{u_and.get('emoji', '🔬')} {u_and.get('display_name')}")
+        st.caption(f"**Ruta:** {u_and.get('role_title')}")
+        h_and = u_and.get("total_hours", 0.0)
+        t_and = u_and.get("target_hours", 700.0)
+        pct_and = min(100.0, (h_and / t_and) * 100.0) if t_and > 0 else 0
+        st.progress(pct_and / 100.0)
+        st.write(f"**{h_and:.1f}** / {t_and:.0f} horas ({pct_and:.1f}%)")
+        ph_and = get_current_phase_for_user(u_and)
+        st.info(f"📍 **{ph_and.get('name')}**\n\n_{ph_and.get('focus')}_")
+
+    with col_b:
+        st.subheader(f"{u_tan.get('emoji', '✨')} {u_tan.get('display_name')}")
+        st.caption(f"**Ruta:** {u_tan.get('role_title')}")
+        h_tan = u_tan.get("total_hours", 0.0)
+        t_tan = u_tan.get("target_hours", 200.0)
+        pct_tan = min(100.0, (h_tan / t_tan) * 100.0) if t_tan > 0 else 0
+        st.progress(pct_tan / 100.0)
+        st.write(f"**{h_tan:.1f}** / {t_tan:.0f} horas ({pct_tan:.1f}%)")
+        ph_tan = get_current_phase_for_user(u_tan)
+        st.success(f"📍 **{ph_tan.get('name')}**\n\n_{ph_tan.get('focus')}_")
+
+    # Gráfico 7 días
     st.markdown("---")
-    st.markdown("### 📈 Actividad de los últimos 7 días")
-    
-    # Preparar datos últimos 7 días
+    st.markdown("### 📈 Actividad Comparativa de los Últimos 7 Días")
     today = date.today()
-    last_7_days = [today - timedelta(days=i) for i in range(6, -1, -1)]
-    
-    def get_mins_per_day(sessions, days):
+    last_7 = [today - timedelta(days=i) for i in range(6, -1, -1)]
+
+    def get_mins(sessions, days):
         counts = {d: 0 for d in days}
         for s in sessions:
             ts = s.get("timestamp", "")
@@ -195,348 +281,372 @@ if menu == "💑 Resumen de Pareja":
                     pass
         return counts
 
-    and_counts = get_mins_per_day(u_anderson.get("sessions", []), last_7_days)
-    nov_counts = get_mins_per_day(u_novia.get("sessions", []), last_7_days)
-    
-    chart_data = pd.DataFrame({
-        "Fecha": [d.strftime("%a %d") for d in last_7_days] * 2,
-        "Minutos": [and_counts[d] for d in last_7_days] + [nov_counts[d] for d in last_7_days],
-        "Estudiante": [u_anderson.get("display_name")] * 7 + [u_novia.get("display_name")] * 7
+    and_c = get_mins(u_and.get("sessions", []), last_7)
+    tan_c = get_mins(u_tan.get("sessions", []), last_7)
+
+    df_chart = pd.DataFrame({
+        "Fecha": [d.strftime("%a %d") for d in last_7] * 2,
+        "Minutos": [and_c[d] for d in last_7] + [tan_c[d] for d in last_7],
+        "Estudiante": [u_and.get("display_name")] * 7 + [u_tan.get("display_name")] * 7
     })
-    
+
     fig = px.bar(
-        chart_data,
+        df_chart,
         x="Fecha",
         y="Minutos",
         color="Estudiante",
         barmode="group",
         color_discrete_map={
-            u_anderson.get("display_name"): "#4f46e5",
-            u_novia.get("display_name"): "#ec4899"
+            u_and.get("display_name"): "#4f46e5",
+            u_tan.get("display_name"): "#ec4899"
         }
     )
-    fig.update_layout(height=350, margin=dict(l=20, r=20, t=20, b=20))
+    fig.update_layout(height=340, margin=dict(l=20, r=20, t=20, b=20))
     st.plotly_chart(fig, use_container_width=True)
 
 # ==============================================================================
-# PANTALLA 2: CRONÓMETRO Y ESTUDIO
+# PANTALLA 1B: TABLERO DE PROGRESO PERSONAL (PARA INVITADOS)
 # ==============================================================================
-elif menu == "⏱️ Cronómetro & Estudio":
+elif menu == "📊 Mi Progreso Personal":
+    st.title(f"📊 Mi Progreso: {curr_user.get('display_name')}")
+    st.caption(f"Enfoque: **{curr_user.get('role_title')}**")
+
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Horas Acumuladas", f"{curr_user.get('total_hours', 0.0):.1f} h")
+    c2.metric("Meta Total", f"{curr_user.get('target_hours', 100):.0f} h")
+    c3.metric("Racha de Práctica", f"{calculate_streak(curr_user.get('sessions', []))} días 🔥")
+
+    h = curr_user.get("total_hours", 0.0)
+    tgt = curr_user.get("target_hours", 100.0)
+    pct = min(100.0, (h / tgt) * 100.0) if tgt > 0 else 0
+    st.markdown(f"**Progreso hacia tu meta:** {pct:.1f}%")
+    st.progress(pct / 100.0)
+
+    ph = get_current_phase_for_user(curr_user)
+    st.info(f"📍 **{ph.get('name')}**\n\n{ph.get('focus')}")
+
+# ==============================================================================
+# PANTALLA 2: MI ESTUDIO & CRONÓMETRO
+# ==============================================================================
+elif menu == "⏱️ Mi Estudio & Cronómetro":
     st.title(f"⏱️ Espacio de Estudio: {curr_user.get('display_name')}")
-    st.caption("Usa el cronómetro interactivo o registra manualmente los minutos estudiados en el día.")
-    
-    tab_timer, tab_manual = st.tabs(["⏳ Cronómetro de Práctica", "📝 Registro Manual Rápido"])
-    
+    tab_timer, tab_manual = st.tabs(["⏳ Cronómetro Interactivo", "📝 Registro Manual Rápido"])
+
     with tab_timer:
         c1, c2 = st.columns([1, 2])
         with c1:
-            categories = curr_user.get("categories", ["General"])
-            cat_choice = st.selectbox("Categoría de Práctica", categories)
-            desc = st.text_input("¿Qué vas a practicar hoy?", placeholder="Ej. Escuchar podcast, ver un video, practicar con IA")
-            mins_selected = st.select_slider("Duración del Bloque (minutos)", options=[5, 10, 15, 20, 25, 30, 45, 60, 90], value=25)
-            
-            # Control de Timer con Streamlit Session State
-            if "timer_running" not in st.session_state:
-                st.session_state["timer_running"] = False
-                st.session_state["timer_start"] = 0
-                st.session_state["timer_total"] = 0
-            
-            start_btn = st.button("▶️ Iniciar Sesión", use_container_width=True, type="primary")
-            if start_btn:
-                st.session_state["timer_running"] = True
-                st.session_state["timer_start"] = time.time()
-                st.session_state["timer_total"] = mins_selected * 60
+            cats = curr_user.get("categories", ["Práctica General"])
+            cat_choice = st.selectbox("Categoría:", cats)
+            desc = st.text_input("¿Qué vas a practicar?", placeholder="Ej. Escuchar podcast, ver video, escribir")
+            dur = st.select_slider("Duración (minutos):", options=[5, 10, 15, 20, 25, 30, 45, 60], value=25)
+
+            if "timer_active" not in st.session_state:
+                st.session_state["timer_active"] = False
+
+            if st.button("▶️ Iniciar Cronómetro", type="primary", use_container_width=True):
+                st.session_state["timer_active"] = True
+                st.session_state["timer_start_t"] = time.time()
+                st.session_state["timer_total_s"] = dur * 60
                 st.session_state["timer_cat"] = cat_choice
                 st.session_state["timer_desc"] = desc
-                st.session_state["timer_mins"] = mins_selected
                 st.rerun()
 
         with c2:
-            if st.session_state.get("timer_running", False):
-                elapsed = time.time() - st.session_state["timer_start"]
-                total = st.session_state["timer_total"]
-                remaining = max(0, total - elapsed)
-                
-                rem_m, rem_s = divmod(int(remaining), 60)
-                elap_m, elap_s = divmod(int(elapsed), 60)
-                
-                pct = min(1.0, elapsed / total) if total > 0 else 1.0
-                
+            if st.session_state.get("timer_active"):
+                elapsed = time.time() - st.session_state["timer_start_t"]
+                total = st.session_state["timer_total_s"]
+                rem = max(0, total - elapsed)
+                rm, rs = divmod(int(rem), 60)
+                em, es = divmod(int(elapsed), 60)
                 st.subheader(f"En sesión: {st.session_state.get('timer_desc', 'Estudio')}")
-                st.markdown(f"### ⏳ Restante: `{rem_m:02d}:{rem_s:02d}` | Transcurrido: `{elap_m:02d}:{elap_s:02d}`")
-                st.progress(pct)
-                
-                c_stop, c_finish = st.columns(2)
-                with c_stop:
-                    if st.button("⏹️ Terminar y Guardar Tiempo Real", use_container_width=True):
-                        actual_mins = max(1, int(round(elapsed / 60.0)))
+                st.markdown(f"### ⏳ Restante: `{rm:02d}:{rs:02d}` | Transcurrido: `{em:02d}:{es:02d}`")
+                st.progress(min(1.0, elapsed / total) if total > 0 else 1.0)
+
+                col_btn1, col_btn2 = st.columns(2)
+                with col_btn1:
+                    if st.button("⏹️ Terminar y Guardar", use_container_width=True):
+                        actual_m = max(1, int(round(elapsed / 60.0)))
                         log_user_session(
-                            selected_uid,
-                            actual_mins,
+                            curr_user["id"],
+                            actual_m,
                             st.session_state.get("timer_cat", "General"),
                             st.session_state.get("timer_desc", "Estudio con cronómetro")
                         )
-                        st.session_state["timer_running"] = False
-                        st.success(f"¡Genial! Guardaste {actual_mins} minutos en tu historial.")
-                        time.sleep(1.5)
+                        st.session_state["timer_active"] = False
+                        st.success(f"¡Registrados {actual_m} minutos en tu historial!")
+                        time.sleep(1.2)
                         st.rerun()
-                with c_finish:
-                    if st.button("❌ Cancelar sin Guardar", use_container_width=True):
-                        st.session_state["timer_running"] = False
+                with col_btn2:
+                    if st.button("❌ Cancelar", use_container_width=True):
+                        st.session_state["timer_active"] = False
                         st.rerun()
             else:
-                st.info("💡 **Consejo:** 20 a 25 minutos de práctica diaria enfocada (Shadowing, escuchar videos o escribir) tienen más impacto que estudiar muchas horas un solo día.")
-                
+                st.info("💡 **Consejo de consistencia:** Una sesión de 20 minutos todos los días produce mejores resultados que estudiar muchas horas una sola vez por semana.")
+
     with tab_manual:
-        st.subheader("Registro Manual de Minutos")
-        st.write("Si practicaste fuera de la app (en el celular, viendo una película en inglés, en Duolingo o leyendo un libro):")
-        
-        with st.form("manual_entry_form"):
-            man_mins = st.number_input("Minutos dedicados:", min_value=1, max_value=360, value=20)
-            man_cat = st.selectbox("Categoría:", curr_user.get("categories", ["General"]))
-            man_desc = st.text_input("Descripción:", placeholder="Ej. 20 min video de YouTube en inglés con subtítulos en inglés")
-            man_notes = st.text_area("Notas o palabras nuevas aprendidas (opcional):", placeholder="Palabras o frases que llamaron tu atención")
+        st.subheader("Registrar Minutos Estudiados")
+        with st.form("manual_log"):
+            man_m = st.number_input("Minutos dedicados:", min_value=1, max_value=360, value=25)
+            man_c = st.selectbox("Categoría:", curr_user.get("categories", ["General"]))
+            man_d = st.text_input("Descripción:", placeholder="Ej. Duolingo en el bus, lectura de artículo en inglés")
+            man_n = st.text_area("Notas o vocabulario nuevo (opcional):")
             
-            submit_manual = st.form_submit_button("✅ Guardar en mi Progreso", use_container_width=True)
-            if submit_manual:
-                log_user_session(selected_uid, man_mins, man_cat, man_desc, man_notes)
-                st.success(f"¡Registrados {man_mins} minutos exitosamente para {curr_user.get('display_name')}!")
+            sub_m = st.form_submit_button("Guardar en mi Historial", use_container_width=True)
+            if sub_m:
+                log_user_session(curr_user["id"], man_m, man_c, man_d, man_n)
+                st.success(f"¡{man_m} minutos guardados!")
                 time.sleep(1)
                 st.rerun()
 
-    # Historial de sesiones recientes
     st.markdown("---")
-    st.subheader(f"📜 Historial de {curr_user.get('display_name')}")
-    sessions = curr_user.get("sessions", [])
-    if sessions:
-        rows = []
-        for s in reversed(sessions[-10:]):
-            rows.append({
-                "Fecha": s.get("timestamp", "")[:16].replace("T", " "),
-                "Minutos": s.get("minutes", 0),
-                "Categoría": s.get("category", "General"),
-                "Descripción": s.get("description", ""),
-                "Notas": s.get("notes", "")
-            })
-        st.dataframe(pd.DataFrame(rows), use_container_width=True)
+    st.subheader("📜 Tus Últimas Sesiones")
+    sess = curr_user.get("sessions", [])
+    if sess:
+        df_s = pd.DataFrame([{
+            "Fecha": s.get("timestamp", "")[:16].replace("T", " "),
+            "Minutos": s.get("minutes", 0),
+            "Categoría": s.get("category", ""),
+            "Descripción": s.get("description", ""),
+            "Notas": s.get("notes", "")
+        } for s in reversed(sess[-8:])])
+        st.dataframe(df_s, use_container_width=True)
     else:
-        st.write("Aún no tienes sesiones registradas. ¡Inicia tu primera sesión hoy!")
+        st.write("Aún no tienes sesiones registradas.")
 
 # ==============================================================================
 # PANTALLA 3: EVALUADOR GEMINI IA
 # ==============================================================================
 elif menu == "🤖 Evaluador Gemini IA":
-    st.title("🤖 Entrenador Inteligente con Gemini")
-    
-    is_academic = curr_user.get("tone") == "academic"
-    
-    if is_academic:
-        st.caption(f"Evaluador oficial riguroso para **{curr_user.get('display_name')}** (Estándar IELTS Academic, vocabulario STEM y estructura formal para posgrado).")
-    else:
-        st.caption(f"Tutora personal cálida y didáctica para **{curr_user.get('display_name')}** (Enfoque en vida cotidiana, fluidez real, trabajo y pronunciación).")
+    st.title("🤖 Entrenador Inteligente con Gemini IA")
+    st.caption(f"Adaptado a: **{curr_user.get('display_name')}** ({curr_user.get('role_title')})")
 
-    # Selección de tema sugerido
-    col_t1, col_t2 = st.columns([1, 1])
-    with col_t1:
-        task_type = st.radio("Tipo de Práctica:", ["Writing (Texto escrito)", "Speaking (Transcripción de voz / Diálogo)"], horizontal=True)
-    with col_t2:
-        user_prompts = PRACTICE_PROMPTS.get(selected_uid, PRACTICE_PROMPTS["novia"])
-        prompt_titles = ["-- Escribir libremente sin tema sugerido --"] + [p["title"] for p in user_prompts]
-        chosen_prompt_title = st.selectbox("💡 ¿Quieres un tema sugerido?", prompt_titles)
+    # Botón mágico para generar tema con IA basado en sus intereses
+    col_ia1, col_ia2 = st.columns([1, 1])
+    with col_ia1:
+        if st.button("🪄 Generar Tema Sorpresa con IA según mis Gustos", use_container_width=True):
+            with st.spinner("Gemini está creando una consigna personalizada para ti..."):
+                gen_p = generate_ai_prompt_for_interests(curr_user)
+                st.session_state["active_prompt_title"] = gen_p.get("title")
+                st.session_state["active_prompt_text"] = gen_p.get("prompt")
+                st.session_state["active_prompt_tip"] = gen_p.get("tip_es")
 
-    active_prompt_desc = ""
-    if chosen_prompt_title != "-- Escribir libremente sin tema sugerido --":
-        for p in user_prompts:
-            if p["title"] == chosen_prompt_title:
-                active_prompt_desc = p["prompt"]
-                st.info(f"**Tema:** {active_prompt_desc}")
-                break
+    with col_ia2:
+        user_prompts = get_prompts_for_user(curr_user)
+        p_titles = ["-- Escribir libremente --"] + [p["title"] for p in user_prompts]
+        selected_p_title = st.selectbox("O elige un tema sugerido:", p_titles)
+        if selected_p_title != "-- Escribir libremente --":
+            for p in user_prompts:
+                if p["title"] == selected_p_title:
+                    st.session_state["active_prompt_title"] = p["title"]
+                    st.session_state["active_prompt_text"] = p["prompt"]
+                    st.session_state["active_prompt_tip"] = ""
 
-    # Área de texto
-    user_text = st.text_area(
-        "Pega o escribe tu texto en inglés:",
-        height=180,
-        placeholder="Type or paste your English text here..."
-    )
-    
-    evaluate_btn = st.button("🚀 Evaluar con IA", type="primary", use_container_width=True)
-    
-    if evaluate_btn:
-        if not user_text.strip():
-            st.warning("Por favor escribe o pega algo en inglés antes de evaluar.")
+    if st.session_state.get("active_prompt_text"):
+        st.info(f"**Tema:** {st.session_state.get('active_prompt_title')}\n\n> {st.session_state.get('active_prompt_text')}\n\n_{st.session_state.get('active_prompt_tip', '')}_")
+
+    task_kind = st.radio("Modalidad:", ["Writing (Texto escrito)", "Speaking (Transcripción de audio)"], horizontal=True)
+    user_input_text = st.text_area("Tu texto en inglés:", height=170, placeholder="Escribe o pega aquí tu texto en inglés...")
+
+    if st.button("🚀 Evaluar con IA", type="primary", use_container_width=True):
+        if not user_input_text.strip():
+            st.warning("Por favor escribe algo en inglés para evaluar.")
         else:
-            with st.spinner("Gemini está leyendo y analizando detalladamente tu texto..."):
-                try:
-                    result = evaluate_with_ai(
-                        curr_user,
-                        "writing" if "Writing" in task_type else "speaking",
-                        user_text
-                    )
-                    
-                    # Guardar evaluación
-                    log_user_evaluation(selected_uid, "writing" if "Writing" in task_type else "speaking", user_text, result)
-                    
-                    st.success("¡Evaluación completada!")
-                    st.markdown("---")
-                    
-                    # RENDER SEGÚN EL PERFIL
-                    if result.get("mode") == "academic":
-                        # Vista Académica para Anderson
-                        band = result.get("overall_band", 0.0)
-                        cefr = result.get("cefr_level", "B2")
-                        
-                        m1, m2, m3, m4 = st.columns(4)
-                        m1.metric("Banda IELTS Estimada", f"{band} / 9.0")
-                        m2.metric("Nivel CEFR", cefr)
-                        m3.metric("Task Response", result.get("task_response", 0.0))
-                        m4.metric("Grammar Range", result.get("grammatical_accuracy", 0.0))
-                        
-                        col_scores1, col_scores2 = st.columns(2)
-                        with col_scores1:
-                            st.write(f"• **Coherencia y Cohesión:** {result.get('coherence_cohesion', 0.0)} / 9.0")
-                            st.write(f"• **Recurso Léxico:** {result.get('lexical_resource', 0.0)} / 9.0")
-                        with col_scores2:
-                            prec = result.get('accuracy_percentage', 0)
-                            st.write(f"• **Precisión General:** {prec}%")
-                            
-                        # Errores críticos
-                        errors = result.get("critical_grammar_errors", [])
-                        if errors:
-                            st.markdown("#### ❌ Errores Gramaticales Críticos:")
-                            for err in errors:
-                                st.error(f"**Original:** `{err.get('error')}` ➔ **Corrección:** `{err.get('fix')}`\n\n_{err.get('rule')}_")
-                                
-                        # Vocabulario
-                        acad_vocab = result.get("academic_vocab_used", [])
-                        if acad_vocab:
-                            st.markdown("#### 📚 Vocabulario Académico Detectado:")
-                            st.success(", ".join(acad_vocab))
-                            
-                        # Upgrades
-                        upgrades = result.get("weak_phrases_to_upgrade", [])
-                        if upgrades:
-                            st.markdown("#### 💡 Upgrades a Nivel C1:")
-                            for u in upgrades:
-                                st.write(f"• `{u.get('original')}` ➔ **{u.get('c1_alternative')}**")
-                                
-                        # Reescritura C1
-                        st.markdown("#### 📝 Reescritura C1 para Publicación / Paper:")
-                        st.code(result.get("c1_rewrite", ""), language="text")
-                        
-                        st.info(f"🎯 **Siguiente acción recomendada:** {result.get('next_action_item', 'Seguir practicando')}")
+            with st.spinner("Gemini está analizando detalladamente tu texto..."):
+                res = evaluate_with_ai(
+                    curr_user,
+                    "writing" if "Writing" in task_kind else "speaking",
+                    user_input_text
+                )
+                log_user_evaluation(curr_user["id"], "writing" if "Writing" in task_kind else "speaking", user_input_text, res)
+                st.success("¡Evaluación completada!")
+                st.markdown("---")
 
-                    else:
-                        # Vista Conversacional y Empática para la Novia
-                        score = result.get("overall_score", 8.0)
-                        cefr = result.get("cefr_level", "B1")
-                        praise = result.get("praise", "¡Excelente trabajo!")
-                        
-                        st.markdown(f"""
-                        <div class="praise-box">
-                            <h3 style="margin:0 0 0.5rem 0;">🌟 ¡Qué bien lo hiciste!</h3>
-                            <p style="font-size:1.1rem; margin:0;">{praise}</p>
-                        </div>
-                        """, unsafe_allow_html=True)
-                        
-                        c_s1, c_s2, c_s3, c_s4 = st.columns(4)
-                        c_s1.metric("Puntuación General", f"{score} / 10 ⭐")
-                        c_s2.metric("Nivel Estimado", cefr)
-                        c_s3.metric("Fluidez", f"{result.get('fluency_score', 8)} / 10")
-                        c_s4.metric("Vocabulario", f"{result.get('vocabulary_score', 8)} / 10")
-                        
-                        # Correcciones amigables
-                        corrections = result.get("grammar_corrections", [])
-                        if corrections:
-                            st.markdown("### 🔍 Cositas para corregir (fáciles de recordar):")
-                            for c in corrections:
-                                st.warning(f"**Dijiste:** *\"{c.get('original')}\"*\n\n👉 **La forma correcta es:** **\"{c.get('correction')}\"**\n\n💡 **¿Por qué?:** {c.get('explanation_es')}")
-                        else:
-                            st.success("🎉 ¡No tuviste ningún error gramatical grave! Tu mensaje se entiende perfectamente.")
+                mode = res.get("mode", "conversational")
+                if mode == "academic":
+                    m1, m2, m3, m4 = st.columns(4)
+                    m1.metric("Banda IELTS Estimada", f"{res.get('overall_band', 0.0)} / 9.0")
+                    m2.metric("Nivel CEFR", res.get("cefr_level", "B2"))
+                    m3.metric("Task Response", res.get("task_response", 0.0))
+                    m4.metric("Gramática", res.get("grammatical_accuracy", 0.0))
 
-                        # Cómo lo diría un nativo
-                        naturals = result.get("natural_alternatives", [])
-                        if naturals:
-                            st.markdown("### ✨ Cómo lo diría un hablante nativo (más natural):")
-                            for n in naturals:
-                                st.info(f"**Tu frase:** *\"{n.get('original')}\"*\n\n🔥 **Suena más natural:** **\"{n.get('more_natural')}\"**\n\n📌 **Contexto:** {n.get('context', '')}")
+                    errs = res.get("critical_grammar_errors", [])
+                    if errs:
+                        st.markdown("#### ❌ Errores Gramaticales:")
+                        for e in errs:
+                            st.error(f"**`{e.get('error')}`** ➔ **`{e.get('fix')}`**\n\n_{e.get('rule')}_")
 
-                        # Frases útiles para guardar
-                        phrases = result.get("useful_phrases_to_learn", [])
-                        if phrases:
-                            st.markdown("### 💬 Frases útiles para tu día a día:")
-                            for p in phrases:
-                                st.markdown(f"• **{p.get('phrase')}** ➔ *{p.get('meaning')}* (Ejemplo: *\"{p.get('example')}\"*)")
+                    st.markdown("#### 📝 Reescritura C1 Académica:")
+                    st.code(res.get("c1_rewrite", ""), language="text")
+                else:
+                    st.markdown(f"""
+                    <div class="praise-box">
+                        <h3 style="margin:0 0 0.4rem 0;">🌟 ¡Excelente esfuerzo!</h3>
+                        <p style="font-size:1.05rem; margin:0;">{res.get('praise', '¡Muy bien hecho!')}</p>
+                    </div>
+                    """, unsafe_allow_html=True)
 
-                        # Versión reescrita
-                        st.markdown("### 📖 Así de lindo y natural se lee tu texto completo:")
-                        st.success(result.get("natural_rewrite", ""))
+                    c_s1, c_s2, c_s3, c_s4 = st.columns(4)
+                    c_s1.metric("Puntuación General", f"{res.get('overall_score', 8)} / 10 ⭐")
+                    c_s2.metric("Nivel Estimado", res.get("cefr_level", "B1"))
+                    c_s3.metric("Fluidez", f"{res.get('fluency_score', 8)} / 10")
+                    c_s4.metric("Vocabulario", f"{res.get('vocabulary_score', 8)} / 10")
 
-                        # Reto
-                        challenge = result.get("challenge_for_next_time", "")
-                        if challenge:
-                            st.markdown(f"""
-                            <div style="background:#fef3c7; border-left: 5px solid #f59e0b; padding:1rem; border-radius:8px; color:#92400e;">
-                                <strong>🎯 Tu mini-reto para la próxima:</strong> {challenge}
-                            </div>
-                            """, unsafe_allow_html=True)
-                            
-                except Exception as ex:
-                    st.error(f"Error durante la evaluación: {ex}")
+                    corrs = res.get("grammar_corrections", [])
+                    if corrs:
+                        st.markdown("### 🔍 Cositas para corregir (fáciles de recordar):")
+                        for c in corrs:
+                            st.warning(f"**Dijiste:** *\"{c.get('original')}\"*\n\n👉 **Forma correcta:** **\"{c.get('correction')}\"**\n\n💡 **¿Por qué?:** {c.get('explanation_es')}")
+
+                    nats = res.get("natural_alternatives", [])
+                    if nats:
+                        st.markdown("### ✨ Cómo lo diría un nativo:")
+                        for n in nats:
+                            st.info(f"**Original:** *\"{n.get('original')}\"* ➔ 🔥 **Más natural:** **\"{n.get('more_natural')}\"** ({n.get('context', '')})")
+
+                    st.markdown("### 📖 Versión reescrita recomendada:")
+                    st.success(res.get("natural_rewrite", ""))
+
+                    ch = res.get("challenge_for_next_time", "")
+                    if ch:
+                        st.info(f"🎯 **Tu mini-reto:** {ch}")
 
 # ==============================================================================
 # PANTALLA 4: BIBLIOTECA DE TEMAS
 # ==============================================================================
 elif menu == "📚 Biblioteca de Temas":
-    st.title("📚 Biblioteca de Práctica & Vocabulario")
-    
-    st.write(f"Temas recomendados según el perfil activo: **{curr_user.get('display_name')}** ({curr_user.get('role_title')})")
-    
-    user_prompts = PRACTICE_PROMPTS.get(selected_uid, PRACTICE_PROMPTS["novia"])
-    
-    for i, p in enumerate(user_prompts, 1):
-        with st.expander(f"{i}. {p.get('title')}", expanded=(i == 1)):
+    st.title("📚 Biblioteca de Práctica Personalizada")
+    st.write(f"Consignas sugeridas basadas en tu enfoque: **{curr_user.get('role_title')}**")
+
+    user_prompts = get_prompts_for_user(curr_user)
+    for idx, p in enumerate(user_prompts, 1):
+        with st.expander(f"{idx}. {p.get('title')}", expanded=(idx == 1)):
             st.markdown(f"**Consigna:**\n\n> {p.get('prompt')}")
-            st.caption("Copia esta consigna y ve a la pestaña '🤖 Evaluador Gemini IA' para responderla.")
+            st.caption("Copia la consigna y ve a la pestaña '🤖 Evaluador Gemini IA' para responderla.")
 
 # ==============================================================================
-# PANTALLA 5: CONFIGURACIÓN
+# PANTALLA 5: MI PERFIL & GUSTOS
 # ==============================================================================
-elif menu == "⚙️ Configuración":
-    st.title("⚙️ Configuración & Compartir la Web")
-    
-    st.markdown("### 👤 Personalizar Nombres y Metas")
-    
-    with st.form("settings_form"):
-        st.write("Puedes personalizar los nombres y metas de estudio:")
-        name_anderson = st.text_input("Nombre de Anderson:", value=users.get("anderson", {}).get("display_name", "Anderson"))
-        name_novia = st.text_input("Nombre de Tania:", value=users.get("novia", {}).get("display_name", "Tania"))
-        
-        target_and = st.number_input("Meta de horas de Anderson:", min_value=10.0, max_value=2000.0, value=float(users.get("anderson", {}).get("target_hours", 700.0)), step=50.0)
-        target_nov = st.number_input("Meta de horas de Tania:", min_value=10.0, max_value=1000.0, value=float(users.get("novia", {}).get("target_hours", 200.0)), step=25.0)
-        
-        save_btn = st.form_submit_button("💾 Guardar Cambios")
-        if save_btn:
-            data["users"]["anderson"]["display_name"] = name_anderson.strip()
-            data["users"]["anderson"]["target_hours"] = target_and
-            
-            data["users"]["novia"]["display_name"] = name_novia.strip()
-            data["users"]["novia"]["target_hours"] = target_nov
-            
-            save_couple_data(data)
-            st.success("¡Configuración guardada exitosamente!")
+elif menu == "👤 Mi Perfil & Gustos":
+    st.title(f"👤 Mi Perfil: {curr_user.get('display_name')}")
+    st.caption("Personaliza tus gustos, tu enfoque de aprendizaje y tu contraseña.")
+
+    with st.form("profile_form"):
+        p_name = st.text_input("Tu Nombre Visible:", value=curr_user.get("display_name", ""))
+        p_emoji = st.text_input("Tu Emoji / Avatar:", value=curr_user.get("emoji", "👤"))
+
+        p_track = st.selectbox(
+            "Tu Enfoque de Estudio:",
+            options=list(AVAILABLE_TRACKS.keys()),
+            index=list(AVAILABLE_TRACKS.keys()).index(curr_user.get("track", "conversational")) if curr_user.get("track") in AVAILABLE_TRACKS else 0,
+            format_func=lambda k: f"{AVAILABLE_TRACKS[k]['title']}"
+        )
+
+        p_target = st.number_input("Tu Meta de Horas Totales:", min_value=10.0, max_value=2000.0, value=float(curr_user.get("target_hours", 100.0)), step=25.0)
+
+        st.write("**Tus Temas de Interés (La IA usará esto para proponerte ejercicios):**")
+        all_possible = ["Viajes & Turismo", "Cine & Series", "Trabajo & Negocios", "Música & Cultura", "Tecnología & Programación", "Gastronomía & Cafés", "Deportes & Salud", "Ciencia & Física", "Videojuegos", "Moda & Arte"]
+        user_ints = curr_user.get("interests", [])
+        new_ints = []
+        c_i1, c_i2 = st.columns(2)
+        for idx, item in enumerate(all_possible):
+            col = c_i1 if (idx % 2 == 0) else c_i2
+            if col.checkbox(item, value=(item in user_ints), key=f"edit_int_{idx}"):
+                new_ints.append(item)
+
+        submit_p = st.form_submit_button("💾 Guardar Mi Perfil", use_container_width=True)
+        if submit_p:
+            update_user_profile(curr_user["id"], p_name, p_emoji, p_track, p_target, new_ints)
+            st.success("¡Perfil y preferencias actualizadas exitosamente!")
             time.sleep(1)
             st.rerun()
 
     st.markdown("---")
-    st.markdown("### 🌐 ¿Cómo compartirla con Tania para usarla en el celular?")
-    st.write("""
-    Para que Tania pueda abrirla desde su celular en cualquier momento, el proceso es 100% gratis y se hace en 3 pasos:
-    
-    1. **Subir este proyecto a un repositorio privado de GitHub** (puedes crear una cuenta gratis en github.com).
-    2. **Entrar a [share.streamlit.io](https://share.streamlit.io/)** e iniciar sesión con tu cuenta de GitHub.
-    3. **Dar clic en 'New App'**, seleccionar este repositorio, poner `app.py` como archivo principal y en **Advanced Settings / Secrets** agregar tu clave de Gemini:
-       ```toml
-       GEMINI_API_KEY = "tu_clave_de_gemini"
-       ```
-    ¡Y listo! Te dará un enlace web (ejemplo: `https://ingles-pareja.streamlit.app`) que le puedes mandar por WhatsApp a ella para que lo abra desde su celular y lo guarde en su pantalla de inicio como una app.
-    """)
+    st.subheader("🔒 Cambiar Mi Contraseña")
+    with st.form("pwd_form"):
+        old_p = st.text_input("Contraseña Actual:", type="password")
+        new_p = st.text_input("Nueva Contraseña:", type="password")
+        new_p_c = st.text_input("Confirmar Nueva Contraseña:", type="password")
+        submit_pwd = st.form_submit_button("Actualizar Contraseña")
+
+        if submit_pwd:
+            if new_p != new_p_c:
+                st.error("Las nuevas contraseñas no coinciden.")
+            else:
+                ok, msg = change_user_password(curr_user["id"], old_p, new_p)
+                if ok:
+                    st.success(msg)
+                else:
+                    st.error(msg)
+
+# ==============================================================================
+# PANTALLA 6: PANEL DE ADMINISTRACIÓN (SOLO ANDERSON)
+# ==============================================================================
+elif menu == "🛠️ Panel de Administración" and is_admin:
+    st.title("🛠️ Panel Maestro de Administración (Anderson)")
+    st.caption("Control global del sistema, gestión de cuentas de invitados y configuración.")
+
+    tab_users_mgmt, tab_sys_cfg = st.tabs(["👥 Gestión de Usuarios e Invitados", "⚙️ Configuración del Sistema"])
+
+    with tab_users_mgmt:
+        st.subheader("Cuentas Registradas en la Plataforma")
+        all_u = list(users.values())
+
+        table_rows = []
+        for u in all_u:
+            table_rows.append({
+                "Usuario": u.get("username", u.get("id")),
+                "Nombre": f"{u.get('emoji', '')} {u.get('display_name')}",
+                "Rol": u.get("role", "guest").upper(),
+                "Enfoque": u.get("role_title", ""),
+                "Horas": f"{u.get('total_hours', 0.0):.1f} / {u.get('target_hours', 100):.0f} h",
+                "Sesiones": len(u.get("sessions", []))
+            })
+        st.dataframe(pd.DataFrame(table_rows), use_container_width=True)
+
+        st.markdown("---")
+        st.subheader("Acciones de Administrador")
+        guest_ids = [uid for uid, u in users.items() if u.get("role") == "guest"]
+
+        if guest_ids:
+            col_act1, col_act2 = st.columns(2)
+            with col_act1:
+                st.write("**Restablecer Contraseña de un Invitado:**")
+                sel_guest_pwd = st.selectbox("Seleccionar Usuario:", guest_ids, key="sel_g_pwd")
+                new_guest_pwd = st.text_input("Nueva Contraseña:", key="in_g_pwd")
+                if st.button("Actualizar Contraseña del Invitado"):
+                    if len(new_guest_pwd) < 4:
+                        st.error("Debe tener al menos 4 caracteres.")
+                    else:
+                        ok, msg = change_user_password(sel_guest_pwd, "", new_guest_pwd, is_admin_override=True)
+                        st.success(f"Contraseña de {sel_guest_pwd} restablecida.")
+
+            with col_act2:
+                st.write("**Eliminar Cuenta de Invitado:**")
+                sel_guest_del = st.selectbox("Seleccionar Invitado a Eliminar:", guest_ids, key="sel_g_del")
+                if st.button("🗑️ Eliminar Usuario Definitivamente", type="secondary"):
+                    ok, msg = admin_delete_user(sel_guest_del)
+                    if ok:
+                        st.success(msg)
+                        time.sleep(1)
+                        st.rerun()
+                    else:
+                        st.error(msg)
+        else:
+            st.info("Aún no tienes amigos registrados como invitados. Cuando tus amigos creen su cuenta, aparecerán aquí para que puedas gestionarlos.")
+
+    with tab_sys_cfg:
+        st.subheader("Configuración Global")
+        curr_cfg = data.get("system_config", {})
+
+        with st.form("sys_cfg_form"):
+            allow_reg = st.checkbox("Permitir que nuevos amigos se registren como invitados", value=curr_cfg.get("allow_guest_registration", True))
+            ann_text = st.text_input("Mensaje de Anuncio (visible en la pantalla de bienvenida):", value=curr_cfg.get("announcement", ""))
+
+            save_cfg = st.form_submit_button("Guardar Configuración Global")
+            if save_cfg:
+                data["system_config"]["allow_guest_registration"] = allow_reg
+                data["system_config"]["announcement"] = ann_text.strip()
+                save_couple_data(data)
+                st.success("Configuración del sistema guardada exitosamente.")
+                time.sleep(1)
+                st.rerun()
