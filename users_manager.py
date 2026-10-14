@@ -53,7 +53,7 @@ DEFAULT_PROFILES = {
     },
     "novia": {
         "id": "novia",
-        "display_name": "Mi Novia",
+        "display_name": "Tania",
         "emoji": "✨",
         "role_title": "Inglés General, Práctico & Conversación",
         "target_hours": 200.0,

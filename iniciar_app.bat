@@ -2,7 +2,7 @@
 title English Accelerator - Pareja
 cd /d "%~dp0"
 echo ========================================================
-echo   Iniciando English Accelerator para Anderson y su Novia
+echo   Iniciando English Accelerator para Anderson y Tania
 echo ========================================================
 echo.
 call .\venv\Scripts\activate.bat

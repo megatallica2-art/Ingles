@@ -124,7 +124,7 @@ with st.sidebar:
 if menu == "💑 Resumen de Pareja":
     st.markdown("""
     <div class="main-header">
-        <h1 style="margin:0; font-size: 2.2rem;">💑 English Together: Anderson & Su Novia</h1>
+        <h1 style="margin:0; font-size: 2.2rem;">💑 English Together: Anderson & Tania</h1>
         <p style="margin-top:0.4rem; opacity:0.9; font-size: 1.1rem;">
             Acompañándose paso a paso para dominar el inglés, cada uno a su propio ritmo.
         </p>
@@ -507,12 +507,12 @@ elif menu == "⚙️ Configuración":
     st.markdown("### 👤 Personalizar Nombres y Metas")
     
     with st.form("settings_form"):
-        st.write("Puedes cambiar el nombre con el que aparece tu novia en la app:")
+        st.write("Puedes personalizar los nombres y metas de estudio:")
         name_anderson = st.text_input("Nombre de Anderson:", value=users.get("anderson", {}).get("display_name", "Anderson"))
-        name_novia = st.text_input("Nombre de tu novia:", value=users.get("novia", {}).get("display_name", "Mi Novia"))
+        name_novia = st.text_input("Nombre de Tania:", value=users.get("novia", {}).get("display_name", "Tania"))
         
         target_and = st.number_input("Meta de horas de Anderson:", min_value=10.0, max_value=2000.0, value=float(users.get("anderson", {}).get("target_hours", 700.0)), step=50.0)
-        target_nov = st.number_input("Meta de horas de tu novia:", min_value=10.0, max_value=1000.0, value=float(users.get("novia", {}).get("target_hours", 200.0)), step=25.0)
+        target_nov = st.number_input("Meta de horas de Tania:", min_value=10.0, max_value=1000.0, value=float(users.get("novia", {}).get("target_hours", 200.0)), step=25.0)
         
         save_btn = st.form_submit_button("💾 Guardar Cambios")
         if save_btn:
@@ -528,9 +528,9 @@ elif menu == "⚙️ Configuración":
             st.rerun()
 
     st.markdown("---")
-    st.markdown("### 🌐 ¿Cómo compartirla con tu novia para usarla en el celular?")
+    st.markdown("### 🌐 ¿Cómo compartirla con Tania para usarla en el celular?")
     st.write("""
-    Para que tu novia pueda abrirla desde su celular en cualquier momento, el proceso es 100% gratis y se hace en 3 pasos:
+    Para que Tania pueda abrirla desde su celular en cualquier momento, el proceso es 100% gratis y se hace en 3 pasos:
     
     1. **Subir este proyecto a un repositorio privado de GitHub** (puedes crear una cuenta gratis en github.com).
     2. **Entrar a [share.streamlit.io](https://share.streamlit.io/)** e iniciar sesión con tu cuenta de GitHub.

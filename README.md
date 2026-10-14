@@ -1,6 +1,6 @@
-# 🇬🇧 English Together: Anderson & Su Novia
+# 🇬🇧 English Together: Anderson & Tania
 
-Aplicación web interactiva y personalizada para que tú y tu novia aprendan inglés juntos, se motiven mutuamente y midan su progreso en tiempo real con Inteligencia Artificial (**Gemini**).
+Aplicación web interactiva y personalizada para que Anderson y Tania aprendan inglés juntos, se motiven mutuamente y midan su progreso en tiempo real con Inteligencia Artificial (**Gemini**).
 
 ---
 
@@ -11,7 +11,7 @@ Aplicación web interactiva y personalizada para que tú y tu novia aprendan ing
   * Meta: 700 horas de práctica deliberada.
   * Estándar riguroso de examinador **IELTS Academic** (evalúa Task Response, Cohesión, Vocabulario Académico y Gramática avanzada).
   * Foco en papers, conferencias, escritura científica y simulacros de examen.
-* **✨ Modo Novia (Inglés General, Práctico & Conversacional):**
+* **✨ Modo Tania (Inglés General, Práctico & Conversacional):**
   * Meta: 200 horas (personalizable).
   * Enfoque en la vida real: viajes, restaurantes, series, trabajo, anécdotas y conversación fluida.
   * Tutora IA empática que explica errores en español sencillo, sugiere cómo diría las cosas un hablante nativo y propone mini-retos motivadores.
@@ -48,7 +48,7 @@ Se abrirá automáticamente en tu navegador en `http://localhost:8501`.
 
 ---
 
-## 🌐 Cómo Publicarla en Internet GRATIS para que tu Novia la Use en su Celular
+## 🌐 Cómo Publicarla en Internet GRATIS para que Tania la Use en su Celular
 
 1. **Sube este proyecto a tu GitHub** (repositorio privado o público).
 2. Entra a **[share.streamlit.io](https://share.streamlit.io/)** e inicia sesión con GitHub.
@@ -60,4 +60,4 @@ Se abrirá automáticamente en tu navegador en `http://localhost:8501`.
    GEMINI_API_KEY = "tu_clave_aquí"
    ```
 5. Haz clic en **Deploy**.
-6. ¡Listo! Te dará un enlace web (ejemplo: `https://ingles-pareja.streamlit.app`) que le puedes enviar por WhatsApp a tu novia para que lo abra desde su celular.
+6. ¡Listo! Te dará un enlace web (ejemplo: `https://ingles-pareja.streamlit.app`) que le puedes enviar por WhatsApp a Tania para que lo abra desde su celular.
