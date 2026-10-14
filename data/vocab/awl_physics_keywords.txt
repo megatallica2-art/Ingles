@@ -1,0 +1,41 @@
+# Academic Word List (AWL) y Vocabulario Crítico para Física / Posgrado Europeo C1
+# Puedes copiar cualquier palabra de aquí y pegarla en el Generador de Anki de session.py
+
+# Grupo 1: Formulación teórica y deducción
+derive
+hypothesize
+postulate
+deduce
+extrapolate
+substantiate
+reconcile
+synthesize
+
+# Grupo 2: Dinámica, perturbaciones y modelos
+perturbation
+fluctuation
+equilibrium
+boundary condition
+discrete
+continuous
+converge
+diverge
+propagate
+invariant
+
+# Grupo 3: Evidencia empírica y análisis de datos
+empirical
+parameter
+negligible
+discrepancy
+correlation
+plateau
+yield
+anomaly
+calibrate
+approximate
+simulate
+verify
+threshold
+magnitude
+proportion
