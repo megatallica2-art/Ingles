@@ -87,6 +87,9 @@ def get_default_users_dict() -> dict:
     and_hash, and_salt = hash_password("anderson2026")
     tan_hash, tan_salt = hash_password("tania2026")
     
+    and_ans_hash = hashlib.sha256("fisica".encode("utf-8")).hexdigest()
+    tan_ans_hash = hashlib.sha256("tania".encode("utf-8")).hexdigest()
+
     return {
         "anderson": {
             "id": "anderson",
@@ -102,6 +105,9 @@ def get_default_users_dict() -> dict:
             "cefr_target": "C1",
             "tone": "academic",
             "interests": ["Física cuántica", "Ciencia", "Investigación", "Tecnología", "Simulaciones"],
+            "security_question": "¿Cuál es tu ciencia o materia favorita?",
+            "security_answer_hash": and_ans_hash,
+            "recovery_pin": "2026",
             "phases": AVAILABLE_TRACKS["academic"]["phases"],
             "categories": AVAILABLE_TRACKS["academic"]["default_categories"],
             "total_minutes": 0,
@@ -122,6 +128,9 @@ def get_default_users_dict() -> dict:
             "cefr_target": "B2 / Fluidez",
             "tone": "conversational",
             "interests": ["Viajes", "Vida diaria", "Series y películas", "Música", "Café y restaurantes"],
+            "security_question": "¿Cuál es tu palabra o color favorito?",
+            "security_answer_hash": tan_ans_hash,
+            "recovery_pin": "2026",
             "phases": AVAILABLE_TRACKS["conversational"]["phases"],
             "categories": AVAILABLE_TRACKS["conversational"]["default_categories"],
             "total_minutes": 0,
@@ -177,11 +186,21 @@ def load_couple_data() -> dict:
                         u["interests"] = defaults[uid]["interests"]
                     if not u.get("track"):
                         u["track"] = defaults[uid]["track"]
+                    if not u.get("security_question"):
+                        u["security_question"] = defaults[uid]["security_question"]
+                        u["security_answer_hash"] = defaults[uid]["security_answer_hash"]
+                        u["recovery_pin"] = defaults[uid]["recovery_pin"]
 
                     # Recalcular horas por consistencia
                     t_min = sum(s.get("minutes", 0) for s in u.get("sessions", []))
                     u["total_minutes"] = t_min
                     u["total_hours"] = round(t_min / 60.0, 2)
+
+            for uid, u in users.items():
+                if not u.get("security_question"):
+                    u["security_question"] = "¿Cuál es tu palabra o comida favorita?"
+                    u["security_answer_hash"] = hashlib.sha256("ingles".encode("utf-8")).hexdigest()
+                    u["recovery_pin"] = "1234"
 
             data.setdefault("system_config", {
                 "allow_guest_registration": True,
@@ -211,7 +230,7 @@ def authenticate_user(username: str, password: str):
                 return u
     return None
 
-def register_guest(username: str, password: str, display_name: str, track_choice: str = "conversational", target_hours: float = 100.0, interests_list: list = None):
+def register_guest(username: str, password: str, display_name: str, track_choice: str = "conversational", target_hours: float = 100.0, interests_list: list = None, security_question: str = "¿Cuál es tu palabra o comida favorita?", security_answer: str = "ingles", recovery_pin: str = "1234"):
     data = load_couple_data()
     users = data.get("users", {})
     
@@ -230,6 +249,8 @@ def register_guest(username: str, password: str, display_name: str, track_choice
 
     new_id = f"guest_{uname_clean}"
     h, s = hash_password(password)
+    ans_hash = hashlib.sha256(security_answer.strip().lower().encode("utf-8")).hexdigest()
+    pin_clean = recovery_pin.strip() if recovery_pin.strip() else "1234"
     track_info = AVAILABLE_TRACKS.get(track_choice, AVAILABLE_TRACKS["conversational"])
 
     new_user = {
@@ -246,6 +267,9 @@ def register_guest(username: str, password: str, display_name: str, track_choice
         "cefr_target": "Fluidez Personal",
         "tone": track_info["tone"],
         "interests": interests_list or ["Vida diaria", "Trabajo", "Viajes", "Música"],
+        "security_question": security_question.strip() or "¿Cuál es tu palabra o comida favorita?",
+        "security_answer_hash": ans_hash,
+        "recovery_pin": pin_clean,
         "phases": track_info["phases"],
         "categories": track_info["default_categories"],
         "total_minutes": 0,
@@ -256,6 +280,94 @@ def register_guest(username: str, password: str, display_name: str, track_choice
     data["users"][new_id] = new_user
     save_couple_data(data)
     return True, "¡Cuenta creada exitosamente! Ya puedes iniciar sesión."
+
+def get_user_security_question(identifier: str) -> tuple[bool, str, str]:
+    """Busca al usuario por username o display_name y retorna (encontrado, pregunta, username)."""
+    data = load_couple_data()
+    users = data.get("users", {})
+    clean_id = identifier.strip().lower()
+
+    if not clean_id:
+        return False, "Por favor ingresa un usuario o nombre válido.", ""
+
+    for uid, u in users.items():
+        u_uname = u.get("username", "").strip().lower()
+        u_dname = u.get("display_name", "").strip().lower()
+        if u_uname == clean_id or u_dname == clean_id:
+            q = u.get("security_question", "¿Cuál es tu palabra o comida favorita?")
+            return True, q, u.get("username", uid)
+
+    return False, "No se encontró ningún usuario registrado con ese nombre.", ""
+
+def reset_password_with_recovery(username: str, recovery_answer_or_pin: str, new_password: str) -> tuple[bool, str]:
+    data = load_couple_data()
+    users = data.get("users", {})
+    uname_clean = username.strip().lower()
+
+    target_user = None
+    for uid, u in users.items():
+        if u.get("username", "").strip().lower() == uname_clean:
+            target_user = u
+            break
+
+    if not target_user:
+        return False, "Usuario no encontrado."
+
+    ans_input_hash = hashlib.sha256(recovery_answer_or_pin.strip().lower().encode("utf-8")).hexdigest()
+    ans_stored_hash = target_user.get("security_answer_hash", "")
+    stored_pin = target_user.get("recovery_pin", "")
+
+    # Validar respuesta o PIN
+    is_valid = (ans_input_hash == ans_stored_hash) or (recovery_answer_or_pin.strip() == stored_pin and stored_pin)
+
+    if not is_valid:
+        return False, "La respuesta de seguridad o PIN de recuperación es incorrecta."
+
+    if len(new_password) < 4:
+        return False, "La nueva contraseña debe tener al menos 4 caracteres."
+
+    new_h, new_s = hash_password(new_password)
+    target_user["password_hash"] = new_h
+    target_user["salt"] = new_s
+    save_couple_data(data)
+    return True, "¡Contraseña restablecida exitosamente! Ya puedes iniciar sesión con tu nueva contraseña."
+
+def recover_username(display_name: str, recovery_answer_or_pin: str) -> tuple[bool, str]:
+    data = load_couple_data()
+    users = data.get("users", {})
+    dname_clean = display_name.strip().lower()
+
+    if not dname_clean:
+        return False, "Por favor ingresa tu nombre visible."
+
+    matches = []
+    for uid, u in users.items():
+        if u.get("display_name", "").strip().lower() == dname_clean:
+            matches.append(u)
+
+    if not matches:
+        return False, f"No encontramos a ningún usuario con el nombre visible '{display_name}'."
+
+    ans_input_hash = hashlib.sha256(recovery_answer_or_pin.strip().lower().encode("utf-8")).hexdigest()
+
+    for u in matches:
+        if (ans_input_hash == u.get("security_answer_hash")) or (recovery_answer_or_pin.strip() == u.get("recovery_pin")):
+            return True, f"Tu nombre de usuario para iniciar sesión es: **`{u.get('username')}`**"
+
+    return False, "El nombre coincide, pero la respuesta de seguridad o PIN no es correcta."
+
+def update_user_security(user_id: str, new_question: str, new_answer: str, new_pin: str) -> bool:
+    data = load_couple_data()
+    u = data["users"].get(user_id)
+    if not u:
+        return False
+    u["security_question"] = new_question.strip()
+    if new_answer.strip():
+        u["security_answer_hash"] = hashlib.sha256(new_answer.strip().lower().encode("utf-8")).hexdigest()
+    if new_pin.strip():
+        u["recovery_pin"] = new_pin.strip()
+    save_couple_data(data)
+    return True
 
 def update_user_profile(user_id: str, display_name: str, emoji: str, track: str, target_hours: float, interests: list):
     data = load_couple_data()

@@ -21,7 +21,11 @@ from users_manager import (
     calculate_streak,
     AVAILABLE_TRACKS,
     toggle_lesson_completion,
-    get_user_completed_lessons
+    get_user_completed_lessons,
+    get_user_security_question,
+    reset_password_with_recovery,
+    recover_username,
+    update_user_security
 )
 from ai_coach import evaluate_with_ai, get_prompts_for_user, generate_ai_prompt_for_interests
 from curriculum_data import CURRICULUM
@@ -90,7 +94,7 @@ if not st.session_state["auth_user_id"] or st.session_state["auth_user_id"] not 
         if announcement:
             st.info(f"📢 **Aviso:** {announcement}")
 
-        tab_login, tab_register = st.tabs(["🔑 Iniciar Sesión", "📝 Registrarse como Invitado"])
+        tab_login, tab_register, tab_recover = st.tabs(["🔑 Iniciar Sesión", "📝 Registrarse como Invitado", "🆘 Recuperar Cuenta"])
 
         # TAB LOGIN
         with tab_login:
@@ -108,7 +112,7 @@ if not st.session_state["auth_user_id"] or st.session_state["auth_user_id"] not 
                         time.sleep(0.5)
                         st.rerun()
                     else:
-                        st.error("Usuario o contraseña incorrectos. Por favor verifica.")
+                        st.error("Usuario o contraseña incorrectos. Por favor verifica o ve a la pestaña '🆘 Recuperar Cuenta'.")
 
             st.caption("💡 **Cuentas principales:** Anderson y Tania tienen sus cuentas de acceso preconfiguradas.")
 
@@ -131,6 +135,20 @@ if not st.session_state["auth_user_id"] or st.session_state["auth_user_id"] not 
                 
                 reg_target = st.number_input("Meta de horas totales de práctica:", min_value=10.0, max_value=1000.0, value=100.0, step=25.0)
                 
+                st.write("**🛡️ Seguridad para recuperar tu cuenta si olvidas la contraseña:**")
+                reg_sec_q = st.selectbox(
+                    "Elige tu Pregunta Secreta de Recuperación:",
+                    options=[
+                        "¿Cuál es tu comida o postre favorito?",
+                        "¿Cómo se llamaba tu primera mascota?",
+                        "¿En qué ciudad te gustaría vivir?",
+                        "¿Cuál es tu película o libro favorito?",
+                        "¿Nombre de tu mejor amigo de la infancia?"
+                    ]
+                )
+                reg_sec_a = st.text_input("Respuesta secreta a tu pregunta:", placeholder="Ej. pizza, toby, paris")
+                reg_pin = st.text_input("PIN secreto de 4 números (opcional):", placeholder="Ej. 1234", max_chars=6)
+
                 st.write("**Selecciona tus temas de interés (para que la IA te dé temas que te gusten):**")
                 all_interests = ["Viajes & Turismo", "Cine & Series", "Trabajo & Negocios", "Música & Cultura", "Tecnología & Programación", "Gastronomía", "Deportes & Fitness", "Ciencia"]
                 selected_interests = []
@@ -144,6 +162,8 @@ if not st.session_state["auth_user_id"] or st.session_state["auth_user_id"] not 
                 if submit_reg:
                     if reg_pword != reg_pword_confirm:
                         st.error("Las contraseñas no coinciden.")
+                    elif not reg_sec_a.strip():
+                        st.error("Por favor escribe una respuesta secreta para poder recuperar tu cuenta en el futuro.")
                     else:
                         ok, msg = register_guest(
                             reg_uname,
@@ -151,7 +171,10 @@ if not st.session_state["auth_user_id"] or st.session_state["auth_user_id"] not 
                             reg_name,
                             reg_track,
                             reg_target,
-                            selected_interests
+                            selected_interests,
+                            reg_sec_q,
+                            reg_sec_a,
+                            reg_pin
                         )
                         if ok:
                             st.success(msg)
@@ -161,6 +184,53 @@ if not st.session_state["auth_user_id"] or st.session_state["auth_user_id"] not 
                             if new_u:
                                 st.session_state["auth_user_id"] = new_u["id"]
                                 st.rerun()
+                        else:
+                            st.error(msg)
+
+        # TAB RECUPERACIÓN
+        with tab_recover:
+            st.subheader("🆘 Recuperación de Usuario o Contraseña")
+            recover_mode = st.radio("¿Qué necesitas recuperar?", ["🔑 Olvidé mi Contraseña", "👤 Olvidé mi Usuario"], horizontal=True)
+
+            if recover_mode == "🔑 Olvidé mi Contraseña":
+                st.write("Escribe tu nombre de usuario para buscar tu pregunta de seguridad:")
+                rec_username_input = st.text_input("Nombre de Usuario:", key="rec_uname_in", placeholder="ej. anderson, tania o tu_usuario")
+
+                if rec_username_input.strip():
+                    found, question_text, target_uname = get_user_security_question(rec_username_input)
+                    if found:
+                        st.info(f"❓ **Pregunta de Seguridad:** {question_text}")
+                        with st.form("reset_pwd_form"):
+                            rec_answer = st.text_input("Tu Respuesta Secreta o tu PIN de 4 números:", type="password")
+                            rec_new_pwd = st.text_input("Nueva Contraseña:", type="password")
+                            rec_new_pwd_c = st.text_input("Confirmar Nueva Contraseña:", type="password")
+                            submit_reset = st.form_submit_button("Restablecer Contraseña", use_container_width=True, type="primary")
+
+                            if submit_reset:
+                                if rec_new_pwd != rec_new_pwd_c:
+                                    st.error("Las nuevas contraseñas no coinciden.")
+                                else:
+                                    ok, msg = reset_password_with_recovery(target_uname, rec_answer, rec_new_pwd)
+                                    if ok:
+                                        st.success(msg)
+                                        time.sleep(1.5)
+                                        st.rerun()
+                                    else:
+                                        st.error(msg)
+                    else:
+                        st.warning("No encontramos ese usuario. Verifica cómo lo escribiste o usa la opción 'Olvidé mi Usuario'.")
+
+            else: # Olvidé mi Usuario
+                st.write("Si no recuerdas tu nombre de usuario, escribe tu nombre visible y tu respuesta secreta:")
+                with st.form("recover_user_form"):
+                    rec_disp_name = st.text_input("Tu Nombre Visible (ej. Carlos, Tania, Anderson):")
+                    rec_user_ans = st.text_input("Tu Respuesta Secreta o PIN de recuperación:", type="password")
+                    submit_rec_user = st.form_submit_button("Recordar mi Usuario", use_container_width=True)
+
+                    if submit_rec_user:
+                        ok, msg = recover_username(rec_disp_name, rec_user_ans)
+                        if ok:
+                            st.success(msg)
                         else:
                             st.error(msg)
     st.stop()
@@ -692,6 +762,23 @@ elif menu == "👤 Mi Perfil & Gustos":
                     st.success(msg)
                 else:
                     st.error(msg)
+
+    st.markdown("---")
+    st.subheader("🛡️ Pregunta Secreta y PIN de Recuperación")
+    st.caption("Si alguna vez olvidas tu contraseña o usuario, el sistema te pedirá esta respuesta o este PIN para recuperarlos.")
+    with st.form("security_form"):
+        curr_q = curr_user.get("security_question", "¿Cuál es tu palabra o comida favorita?")
+        new_q = st.text_input("Tu Pregunta Secreta:", value=curr_q)
+        new_a = st.text_input("Nueva Respuesta Secreta (déjala en blanco si no deseas cambiarla):", type="password")
+        curr_pin = curr_user.get("recovery_pin", "1234")
+        new_pin = st.text_input("Tu PIN Secreto de 4 números:", value=curr_pin, max_chars=6)
+        submit_sec = st.form_submit_button("Actualizar Seguridad de Recuperación")
+
+        if submit_sec:
+            update_user_security(curr_user["id"], new_q, new_a, new_pin)
+            st.success("¡Datos de recuperación actualizados exitosamente!")
+            time.sleep(1)
+            st.rerun()
 
 # ==============================================================================
 # PANTALLA 6: PANEL DE ADMINISTRACIÓN (SOLO ANDERSON)

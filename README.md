@@ -16,10 +16,11 @@ Aplicación web interactiva y personalizada para que Anderson y Tania aprendan i
   * Enfoque en la vida real: viajes, restaurantes, series, trabajo, anécdotas y conversación fluida.
   * Tutora IA empática que explica errores en español sencillo, sugiere cómo diría las cosas un hablante nativo y propone mini-retos motivadores.
 
-### 2. 🔐 Sistema de Usuarios & Jerarquía (3 Niveles)
+### 2. 🔐 Sistema de Usuarios, Jerarquía & Recuperación de Cuentas
 * **👑 Administrador (Anderson):** Acceso total al panel de administración, control de configuraciones del sistema, restablecimiento de contraseñas de invitados y gestión de cuentas.
 * **💖 Co-administradora (Tania):** Acceso al espacio de estudio, resumen de pareja, personalización de metas y gustos propios.
-* **🌟 Invitados / Amigos:** Pueden crear su propia cuenta desde la pantalla principal, elegir su enfoque (Negocios, Viajes, Conversación), registrar sus horas, personalizar sus gustos y usar el evaluador de IA sin ver las configuraciones de administración.
+* **🌟 Invitados / Amigos:** Pueden crear su propia cuenta desde la pantalla principal, elegir su enfoque (Negocios, Viajes, Conversación), registrar sus horas y personalizar sus gustos.
+* **🆘 Recuperación de Usuario y Contraseña:** En caso de olvido, cualquier persona puede recuperar su nombre de usuario o restablecer su contraseña respondiendo su **Pregunta Secreta de Seguridad** o usando su **PIN de 4 dígitos**.
 
 ### 3. 🎓 Academia de Clases por Niveles (CEFR A1 ➔ C1)
 * **A1 ➔ A2 (Cimientos & Rutinas):** Verbo To Be, Presente Simple, Regla de Oro (-s/-es), preguntas con Wh-, Pasado Simple, Futuro con Going to vs Will.
