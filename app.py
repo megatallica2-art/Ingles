@@ -19,9 +19,12 @@ from users_manager import (
     log_user_evaluation,
     get_current_phase_for_user,
     calculate_streak,
-    AVAILABLE_TRACKS
+    AVAILABLE_TRACKS,
+    toggle_lesson_completion,
+    get_user_completed_lessons
 )
 from ai_coach import evaluate_with_ai, get_prompts_for_user, generate_ai_prompt_for_interests
+from curriculum_data import CURRICULUM
 
 # Configuración de página
 st.set_page_config(
@@ -193,6 +196,7 @@ with st.sidebar:
         menu_options.append("📊 Mi Progreso Personal")
 
     menu_options.extend([
+        "🎓 Clases por Niveles (A1 ➔ C1)",
         "⏱️ Mi Estudio & Cronómetro",
         "🤖 Evaluador Gemini IA",
         "📚 Biblioteca de Temas",
@@ -324,6 +328,117 @@ elif menu == "📊 Mi Progreso Personal":
 
     ph = get_current_phase_for_user(curr_user)
     st.info(f"📍 **{ph.get('name')}**\n\n{ph.get('focus')}")
+
+# ==============================================================================
+# PANTALLA: CLASES POR NIVELES (A1 ➔ C1)
+# ==============================================================================
+elif menu == "🎓 Clases por Niveles (A1 ➔ C1)":
+    st.title("🎓 Academia de Clases por Niveles (CEFR)")
+    st.caption("Plan de estudio estructurado paso a paso con teoría explicada en español, fórmulas, ejemplos de la vida real, quizzes interactivos y retos calificados con Inteligencia Artificial.")
+
+    lvl_keys = list(CURRICULUM.keys())
+    lvl_labels = {k: CURRICULUM[k]["title"] for k in lvl_keys}
+
+    selected_lvl_key = st.selectbox(
+        "📚 Selecciona el Nivel que deseas estudiar:",
+        options=lvl_keys,
+        format_func=lambda k: lvl_labels[k]
+    )
+
+    lvl_info = CURRICULUM[selected_lvl_key]
+    lessons = lvl_info["lessons"]
+
+    completed_lessons = get_user_completed_lessons(curr_user["id"])
+    completed_in_lvl = sum(1 for l in lessons if l["id"] in completed_lessons)
+    total_in_lvl = len(lessons)
+    pct_lvl = (completed_in_lvl / total_in_lvl) * 100.0 if total_in_lvl > 0 else 0
+
+    st.markdown(f"""
+    <div style="background: rgba(255,255,255,0.04); border-left: 5px solid {lvl_info.get('badge_color', '#4f46e5')}; padding: 1rem 1.2rem; border-radius: 8px; margin: 1rem 0;">
+        <h3 style="margin:0 0 0.3rem 0;">{lvl_info['title']}</h3>
+        <p style="margin:0; opacity:0.85;">{lvl_info['description']}</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    st.write(f"**Progreso en este Nivel:** {completed_in_lvl} de {total_in_lvl} clases completadas ({pct_lvl:.0f}%)")
+    st.progress(pct_lvl / 100.0)
+    st.markdown("---")
+
+    for i, lesson in enumerate(lessons, 1):
+        is_done = lesson["id"] in completed_lessons
+        icon = "✅" if is_done else "📖"
+        exp_title = f"{icon} Clase {lesson['id']}: {lesson['title']} • [{lesson['sublevel']}]"
+
+        with st.expander(exp_title, expanded=(i == 1 and not is_done)):
+            col_h1, col_h2 = st.columns([3, 1.2])
+            with col_h1:
+                st.markdown(f"**🎯 Objetivo de la clase:** {lesson['objective']}")
+            with col_h2:
+                btn_txt = "✅ Completada (desmarcar)" if is_done else "🔘 Marcar como Aprendida"
+                if st.button(btn_txt, key=f"mark_btn_{lesson['id']}", use_container_width=True):
+                    new_st = toggle_lesson_completion(curr_user["id"], lesson["id"])
+                    if new_st:
+                        log_user_session(curr_user["id"], 15, "Clases & Gramática", f"Completó la clase {lesson['id']}: {lesson['title']}")
+                        st.success(f"¡Felicitaciones! Has completado la clase {lesson['id']} y sumaste 15 min de estudio.")
+                    else:
+                        st.info(f"Clase {lesson['id']} desmarcada.")
+                    time.sleep(0.8)
+                    st.rerun()
+
+            st.markdown("#### 📘 Explicación en Español:")
+            st.markdown(lesson["explanation_es"])
+
+            if lesson.get("formula"):
+                st.markdown("**💡 Estructura / Fórmula Clave:**")
+                st.code(lesson["formula"], language="text")
+
+            st.markdown("#### 🗣️ Ejemplos de la Vida Real:")
+            for eg in lesson["examples"]:
+                st.markdown(f"• 🇬🇧 **{eg['en']}**\n  \n  🇪🇸 _{eg['es']}_")
+
+            mst = lesson.get("common_mistake")
+            if mst:
+                st.markdown("#### ⚠️ Error Típico a Evitar:")
+                st.warning(f"❌ **Incorrecto:** `{mst['wrong']}`\n\n✅ **Correcto:** `{mst['right']}`\n\n📌 **¿Por qué?:** {mst['why']}")
+
+            qz = lesson.get("quiz")
+            if qz:
+                st.markdown("#### 🧠 Comprobación Rápida (Mini-Quiz):")
+                st.write(f"**{qz['question']}**")
+                u_pick = st.radio("Selecciona la opción correcta:", qz["options"], key=f"qz_opt_{lesson['id']}")
+                if st.button("Verificar Respuesta", key=f"qz_btn_{lesson['id']}"):
+                    p_idx = qz["options"].index(u_pick)
+                    if p_idx == qz["answer_idx"]:
+                        st.success(f"🎉 ¡Excelente! {qz['feedback']}")
+                    else:
+                        correct_ans = qz["options"][qz["answer_idx"]]
+                        st.error(f"¡Casi! La respuesta correcta es: **\"{correct_ans}\"**.\n\n{qz['feedback']}")
+
+            ch = lesson.get("practice_challenge")
+            if ch:
+                st.markdown("---")
+                st.markdown("#### 📝 Reto de Práctica:")
+                st.info(f"👉 **Consigna:** {ch}")
+
+                user_txt = st.text_area("Escribe tu respuesta en inglés para que Gemini la revise:", key=f"ch_txt_{lesson['id']}", height=90)
+                if st.button("🚀 Evaluar mi Ejercicio con Gemini IA", key=f"ch_btn_{lesson['id']}", type="primary"):
+                    if not user_txt.strip():
+                        st.warning("Por favor escribe tu respuesta antes de evaluar.")
+                    else:
+                        with st.spinner("Gemini está evaluando tu ejercicio de esta clase..."):
+                            e_res = evaluate_with_ai(curr_user, "writing", user_txt)
+                            log_user_evaluation(curr_user["id"], f"Clase {lesson['id']}", user_txt, e_res)
+                            st.success("¡Ejercicio evaluado!")
+                            
+                            if e_res.get("mode") == "academic":
+                                st.write(f"• **Banda IELTS:** {e_res.get('overall_band', 0.0)} / 9.0 | **Nivel:** {e_res.get('cefr_level')}")
+                                st.code(e_res.get("c1_rewrite", ""))
+                            else:
+                                st.write(f"• **Puntuación:** {e_res.get('overall_score', 8)} / 10 ⭐ | **Nivel:** {e_res.get('cefr_level')}")
+                                st.info(f"🌟 **Feedback:** {e_res.get('praise', '¡Buen trabajo!')}")
+                                for cr in e_res.get("grammar_corrections", []):
+                                    st.warning(f"👉 `{cr.get('original')}` ➔ **{cr.get('correction')}** ({cr.get('explanation_es')})")
+                                st.success(f"📖 **Versión natural:** {e_res.get('natural_rewrite')}")
 
 # ==============================================================================
 # PANTALLA 2: MI ESTUDIO & CRONÓMETRO

@@ -21,13 +21,20 @@ Aplicación web interactiva y personalizada para que Anderson y Tania aprendan i
 * **💖 Co-administradora (Tania):** Acceso al espacio de estudio, resumen de pareja, personalización de metas y gustos propios.
 * **🌟 Invitados / Amigos:** Pueden crear su propia cuenta desde la pantalla principal, elegir su enfoque (Negocios, Viajes, Conversación), registrar sus horas, personalizar sus gustos y usar el evaluador de IA sin ver las configuraciones de administración.
 
-### 3. 💑 Resumen de Pareja (Dashboard Privado)
+### 3. 🎓 Academia de Clases por Niveles (CEFR A1 ➔ C1)
+* **A1 ➔ A2 (Cimientos & Rutinas):** Verbo To Be, Presente Simple, Regla de Oro (-s/-es), preguntas con Wh-, Pasado Simple, Futuro con Going to vs Will.
+* **A2 ➔ B1 (Experiencias & Fluidez):** Presente Perfecto, Presente Perfecto vs Pasado Simple, Condicionales 1 y 2.
+* **B1 ➔ B2 (Profesional & Formal):** Voz Pasiva, Tercer Condicional, modales de deducción, colocaciones profesionales.
+* **B2 ➔ C1 (Académico STEM & IELTS 8+):** Inversión sintáctica retórica, atenuación científica (*hedging*), vocabulario AWL.
+* Cada clase incluye **teoría en español**, **fórmulas**, **ejemplos bilingües**, **alertas de errores típicos**, **mini-quiz interactivo** y **reto de práctica evaluado por Gemini IA**.
+
+### 4. 💑 Resumen de Pareja (Dashboard Privado)
 * Exclusivo para Anderson y Tania: horas acumuladas en equipo, rachas y comparativas.
 
-### 4. ⏱️ Centro de Estudio & Cronómetro
+### 5. ⏱️ Centro de Estudio & Cronómetro
 * Cronómetro interactivo por bloques y registro manual rápido.
 
-### 5. 🤖 Evaluador Gemini IA Personalizado
+### 6. 🤖 Evaluador Gemini IA Personalizado
 * Generador dinámico de temas según los gustos e intereses de cada usuario (Cine, Tecnología, Viajes, etc.).
 * Correcciones instantáneas y explicaciones amigables.
 

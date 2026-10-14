@@ -390,3 +390,24 @@ def calculate_streak(sessions: list) -> int:
         streak += 1
         current_check -= timedelta(days=1)
     return streak
+
+def toggle_lesson_completion(user_id: str, lesson_id: str) -> bool:
+    data = load_couple_data()
+    u = data["users"].get(user_id)
+    if not u:
+        return False
+    completed = u.setdefault("completed_lessons", [])
+    if lesson_id in completed:
+        completed.remove(lesson_id)
+        is_done = False
+    else:
+        completed.append(lesson_id)
+        is_done = True
+    save_couple_data(data)
+    return is_done
+
+def get_user_completed_lessons(user_id: str) -> list:
+    data = load_couple_data()
+    u = data["users"].get(user_id, {})
+    return u.get("completed_lessons", [])
+
