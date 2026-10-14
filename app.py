@@ -27,7 +27,12 @@ from users_manager import (
     recover_username,
     update_user_security
 )
-from ai_coach import evaluate_with_ai, get_prompts_for_user, generate_ai_prompt_for_interests
+from ai_coach import (
+    evaluate_with_ai,
+    evaluate_speaking_audio,
+    get_prompts_for_user,
+    generate_ai_prompt_for_interests
+)
 from curriculum_data import CURRICULUM
 
 # Configuración de página
@@ -629,71 +634,159 @@ elif menu == "🤖 Evaluador Gemini IA":
     if st.session_state.get("active_prompt_text"):
         st.info(f"**Tema:** {st.session_state.get('active_prompt_title')}\n\n> {st.session_state.get('active_prompt_text')}\n\n_{st.session_state.get('active_prompt_tip', '')}_")
 
-    task_kind = st.radio("Modalidad:", ["Writing (Texto escrito)", "Speaking (Transcripción de audio)"], horizontal=True)
-    user_input_text = st.text_area("Tu texto en inglés:", height=170, placeholder="Escribe o pega aquí tu texto en inglés...")
+    input_method = st.radio(
+        "Elige cómo deseas practicar:",
+        ["🎙️ Grabar con Micrófono en Vivo (Speaking)", "📝 Escribir Texto (Writing)", "⌨️ Pegar Transcripción de Audio"],
+        horizontal=True
+    )
 
-    if st.button("🚀 Evaluar con IA", type="primary", use_container_width=True):
-        if not user_input_text.strip():
-            st.warning("Por favor escribe algo en inglés para evaluar.")
+    # 1. CASO MICRÓFONO EN VIVO
+    if input_method == "🎙️ Grabar con Micrófono en Vivo (Speaking)":
+        st.write("🎙️ **Graba tu voz hablando en inglés** (puedes responder al tema sugerido de arriba o hablar libremente de 15 a 60 segundos):")
+        audio_recorded = st.audio_input("Presiona el botón rojo para comenzar a hablar:")
+
+        if audio_recorded is not None:
+            st.audio(audio_recorded)
+            if st.button("🚀 Evaluar mi Pronunciación y Speaking con Gemini IA", type="primary", use_container_width=True):
+                with st.spinner("Gemini está escuchando tu audio, analizando tu pronunciación, ritmo y fluidez..."):
+                    try:
+                        audio_bytes = audio_recorded.read()
+                        res_audio = evaluate_speaking_audio(curr_user, audio_bytes)
+                        log_user_evaluation(curr_user["id"], "speaking_audio", res_audio.get("transcript", "Audio en vivo"), res_audio)
+                        st.success("¡Análisis de Speaking completado!")
+                        st.markdown("---")
+
+                        # Transcripción detectada
+                        st.markdown("### 🎙️ Lo que Gemini escuchó en tu audio:")
+                        st.info(f"🗣️ *\"{res_audio.get('transcript', 'No se detectó voz clara')}\"*")
+
+                        mode = res_audio.get("mode", "conversational_speaking")
+                        if mode == "academic_speaking":
+                            col_m1, col_m2, col_m3, col_m4 = st.columns(4)
+                            col_m1.metric("Banda IELTS Speaking", f"{res_audio.get('overall_band', 6.5)} / 9.0")
+                            col_m2.metric("Pronunciación (PR)", f"{res_audio.get('pronunciation_score', 6.0)} / 9.0")
+                            col_m3.metric("Fluidez (FC)", f"{res_audio.get('fluency_score', 6.5)} / 9.0")
+                            col_m4.metric("Nivel CEFR", res_audio.get("cefr_level", "B2"))
+
+                            p_tips = res_audio.get("pronunciation_feedback", [])
+                            if p_tips:
+                                st.markdown("#### 🗣️ Feedback de Pronunciación & Fonética:")
+                                for pt in p_tips:
+                                    st.warning(f"• **Palabra:** `{pt.get('word')}` | **Sonó:** `{pt.get('detected_sound')}` ➔ **Fonética correcta:** `{pt.get('correct_phonetics')}`\n\n📌 **Tip:** {pt.get('tip')}")
+
+                            st.markdown("#### 📝 Reescritura Oral C1 (Fluidez Formal):")
+                            st.code(res_audio.get("c1_rewrite", ""), language="text")
+                            st.info(f"🎯 **Siguiente recomendación:** {res_audio.get('next_action_item', 'Seguir practicando')}")
+
+                        else:
+                            st.markdown(f"""
+                            <div class="praise-box">
+                                <h3 style="margin:0 0 0.4rem 0;">🌟 ¡Qué gran valentía al hablar!</h3>
+                                <p style="font-size:1.05rem; margin:0;">{res_audio.get('praise', '¡Se nota tu entusiasmo!')}</p>
+                            </div>
+                            """, unsafe_allow_html=True)
+
+                            col_s1, col_s2, col_s3, col_s4 = st.columns(4)
+                            col_s1.metric("Calificación Global", f"{res_audio.get('overall_score', 8.5)} / 10 ⭐")
+                            col_s2.metric("Pronunciación", f"{res_audio.get('pronunciation_score', 8)} / 10 🗣️")
+                            col_s3.metric("Fluidez y Ritmo", f"{res_audio.get('fluency_score', 8.5)} / 10 🌊")
+                            col_s4.metric("Nivel Detectado", res_audio.get("cefr_level", "B1"))
+
+                            # Tips de pronunciación amigables
+                            tips = res_audio.get("pronunciation_tips", [])
+                            if tips:
+                                st.markdown("### 🗣️ Cómo pronunciar palabras clave (guía fonética en español):")
+                                for t in tips:
+                                    st.info(f"• **Palabra:** **\"{t.get('word')}\"**\n\n👉 **Así se pronuncia fácil:** **`/{t.get('how_to_pronounce_es')}/`**\n\n💡 **Consejo:** {t.get('explanation')}")
+
+                            corrs = res_audio.get("grammar_oral_corrections", [])
+                            if corrs:
+                                st.markdown("### 🔍 Ajustes gramaticales al hablar:")
+                                for c in corrs:
+                                    st.warning(f"**Dijiste:** *\"{c.get('original')}\"* ➔ 👉 **La forma correcta es:** **\"{c.get('correction')}\"** ({c.get('explanation_es')})")
+
+                            st.markdown("### 📖 Así sonaría tu mensaje si lo dijera un nativo de forma fluida:")
+                            st.success(res_audio.get("natural_rewrite", ""))
+
+                            ch = res_audio.get("challenge_for_next_time", "")
+                            if ch:
+                                st.markdown(f"""
+                                <div style="background:#fef3c7; border-left: 5px solid #f59e0b; padding:1rem; border-radius:8px; color:#92400e;">
+                                    <strong>🎯 Tu mini-reto para el próximo audio:</strong> {ch}
+                                </div>
+                                """, unsafe_allow_html=True)
+
+                    except Exception as ex:
+                        st.error(f"Error al analizar el audio: {ex}")
         else:
-            with st.spinner("Gemini está analizando detalladamente tu texto..."):
-                res = evaluate_with_ai(
-                    curr_user,
-                    "writing" if "Writing" in task_kind else "speaking",
-                    user_input_text
-                )
-                log_user_evaluation(curr_user["id"], "writing" if "Writing" in task_kind else "speaking", user_input_text, res)
-                st.success("¡Evaluación completada!")
-                st.markdown("---")
+            st.info("👆 Haz clic en el botón rojo de arriba para grabar tu audio desde tu celular o computadora.")
 
-                mode = res.get("mode", "conversational")
-                if mode == "academic":
-                    m1, m2, m3, m4 = st.columns(4)
-                    m1.metric("Banda IELTS Estimada", f"{res.get('overall_band', 0.0)} / 9.0")
-                    m2.metric("Nivel CEFR", res.get("cefr_level", "B2"))
-                    m3.metric("Task Response", res.get("task_response", 0.0))
-                    m4.metric("Gramática", res.get("grammatical_accuracy", 0.0))
+    # 2. CASO TEXTO O TRANSCRIPCIÓN ESCRITA
+    else:
+        user_input_text = st.text_area("Tu texto en inglés:", height=170, placeholder="Escribe o pega aquí tu texto en inglés...")
 
-                    errs = res.get("critical_grammar_errors", [])
-                    if errs:
-                        st.markdown("#### ❌ Errores Gramaticales:")
-                        for e in errs:
-                            st.error(f"**`{e.get('error')}`** ➔ **`{e.get('fix')}`**\n\n_{e.get('rule')}_")
+        if st.button("🚀 Evaluar Texto con Gemini IA", type="primary", use_container_width=True):
+            if not user_input_text.strip():
+                st.warning("Por favor escribe algo en inglés para evaluar.")
+            else:
+                with st.spinner("Gemini está analizando detalladamente tu texto..."):
+                    res = evaluate_with_ai(
+                        curr_user,
+                        "writing" if "Writing" in input_method else "speaking",
+                        user_input_text
+                    )
+                    log_user_evaluation(curr_user["id"], "writing" if "Writing" in input_method else "speaking", user_input_text, res)
+                    st.success("¡Evaluación completada!")
+                    st.markdown("---")
 
-                    st.markdown("#### 📝 Reescritura C1 Académica:")
-                    st.code(res.get("c1_rewrite", ""), language="text")
-                else:
-                    st.markdown(f"""
-                    <div class="praise-box">
-                        <h3 style="margin:0 0 0.4rem 0;">🌟 ¡Excelente esfuerzo!</h3>
-                        <p style="font-size:1.05rem; margin:0;">{res.get('praise', '¡Muy bien hecho!')}</p>
-                    </div>
-                    """, unsafe_allow_html=True)
+                    mode = res.get("mode", "conversational")
+                    if mode == "academic":
+                        m1, m2, m3, m4 = st.columns(4)
+                        m1.metric("Banda IELTS Estimada", f"{res.get('overall_band', 0.0)} / 9.0")
+                        m2.metric("Nivel CEFR", res.get("cefr_level", "B2"))
+                        m3.metric("Task Response", res.get("task_response", 0.0))
+                        m4.metric("Gramática", res.get("grammatical_accuracy", 0.0))
 
-                    c_s1, c_s2, c_s3, c_s4 = st.columns(4)
-                    c_s1.metric("Puntuación General", f"{res.get('overall_score', 8)} / 10 ⭐")
-                    c_s2.metric("Nivel Estimado", res.get("cefr_level", "B1"))
-                    c_s3.metric("Fluidez", f"{res.get('fluency_score', 8)} / 10")
-                    c_s4.metric("Vocabulario", f"{res.get('vocabulary_score', 8)} / 10")
+                        errs = res.get("critical_grammar_errors", [])
+                        if errs:
+                            st.markdown("#### ❌ Errores Gramaticales:")
+                            for e in errs:
+                                st.error(f"**`{e.get('error')}`** ➔ **`{e.get('fix')}`**\n\n_{e.get('rule')}_")
 
-                    corrs = res.get("grammar_corrections", [])
-                    if corrs:
-                        st.markdown("### 🔍 Cositas para corregir (fáciles de recordar):")
-                        for c in corrs:
-                            st.warning(f"**Dijiste:** *\"{c.get('original')}\"*\n\n👉 **Forma correcta:** **\"{c.get('correction')}\"**\n\n💡 **¿Por qué?:** {c.get('explanation_es')}")
+                        st.markdown("#### 📝 Reescritura C1 Académica:")
+                        st.code(res.get("c1_rewrite", ""), language="text")
+                    else:
+                        st.markdown(f"""
+                        <div class="praise-box">
+                            <h3 style="margin:0 0 0.4rem 0;">🌟 ¡Excelente esfuerzo!</h3>
+                            <p style="font-size:1.05rem; margin:0;">{res.get('praise', '¡Muy bien hecho!')}</p>
+                        </div>
+                        """, unsafe_allow_html=True)
 
-                    nats = res.get("natural_alternatives", [])
-                    if nats:
-                        st.markdown("### ✨ Cómo lo diría un nativo:")
-                        for n in nats:
-                            st.info(f"**Original:** *\"{n.get('original')}\"* ➔ 🔥 **Más natural:** **\"{n.get('more_natural')}\"** ({n.get('context', '')})")
+                        c_s1, c_s2, c_s3, c_s4 = st.columns(4)
+                        c_s1.metric("Puntuación General", f"{res.get('overall_score', 8)} / 10 ⭐")
+                        c_s2.metric("Nivel Estimado", res.get("cefr_level", "B1"))
+                        c_s3.metric("Fluidez", f"{res.get('fluency_score', 8)} / 10")
+                        c_s4.metric("Vocabulario", f"{res.get('vocabulary_score', 8)} / 10")
 
-                    st.markdown("### 📖 Versión reescrita recomendada:")
-                    st.success(res.get("natural_rewrite", ""))
+                        corrs = res.get("grammar_corrections", [])
+                        if corrs:
+                            st.markdown("### 🔍 Cositas para corregir (fáciles de recordar):")
+                            for c in corrs:
+                                st.warning(f"**Dijiste:** *\"{c.get('original')}\"*\n\n👉 **Forma correcta:** **\"{c.get('correction')}\"**\n\n💡 **¿Por qué?:** {c.get('explanation_es')}")
 
-                    ch = res.get("challenge_for_next_time", "")
-                    if ch:
-                        st.info(f"🎯 **Tu mini-reto:** {ch}")
+                        nats = res.get("natural_alternatives", [])
+                        if nats:
+                            st.markdown("### ✨ Cómo lo diría un nativo:")
+                            for n in nats:
+                                st.info(f"**Original:** *\"{n.get('original')}\"* ➔ 🔥 **Más natural:** **\"{n.get('more_natural')}\"** ({n.get('context', '')})")
+
+                        st.markdown("### 📖 Versión reescrita recomendada:")
+                        st.success(res.get("natural_rewrite", ""))
+
+                        ch = res.get("challenge_for_next_time", "")
+                        if ch:
+                            st.info(f"🎯 **Tu mini-reto:** {ch}")
 
 # ==============================================================================
 # PANTALLA 4: BIBLIOTECA DE TEMAS
