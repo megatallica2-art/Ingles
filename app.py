@@ -40,7 +40,11 @@ from ai_coach import (
     get_prompts_for_user,
     generate_ai_prompt_for_interests
 )
-from curriculum_data import CURRICULUM
+from curriculum_data import (
+    CURRICULUM,
+    get_audio_for_text,
+    build_interactive_example_html
+)
 
 # Configuración de página
 st.set_page_config(
@@ -78,6 +82,89 @@ st.markdown("""
         border-radius: 8px;
         color: #065f46;
         margin: 1rem 0;
+    }
+    /* Estilos para ejemplos interactivos, hover tooltips y fonemas */
+    .example-box {
+        background: rgba(30, 41, 59, 0.45);
+        border: 1px solid rgba(99, 102, 241, 0.25);
+        border-left: 4px solid #6366f1;
+        border-radius: 12px;
+        padding: 1rem 1.2rem;
+        margin-bottom: 0.8rem;
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
+    }
+    .hover-word {
+        position: relative;
+        display: inline-block;
+        cursor: help;
+        font-size: 1.15rem;
+        font-weight: 600;
+        color: #f8fafc;
+        border-bottom: 2px dotted #818cf8;
+        margin: 0 2px;
+        padding: 1px 3px;
+        border-radius: 4px;
+        transition: all 0.2s ease;
+    }
+    .hover-word:hover {
+        color: #38bdf8;
+        background: rgba(56, 189, 248, 0.18);
+        border-bottom-color: #38bdf8;
+    }
+    .hover-word .tip {
+        visibility: hidden;
+        opacity: 0;
+        position: absolute;
+        bottom: 130%;
+        left: 50%;
+        transform: translateX(-50%);
+        background: #0f172a;
+        color: #38bdf8;
+        border: 1px solid #38bdf8;
+        font-size: 0.82rem;
+        font-weight: 500;
+        padding: 4px 9px;
+        border-radius: 6px;
+        white-space: nowrap;
+        box-shadow: 0 6px 16px rgba(0,0,0,0.5);
+        z-index: 999;
+        transition: opacity 0.2s ease, transform 0.2s ease;
+        pointer-events: none;
+    }
+    .hover-word .tip::after {
+        content: "";
+        position: absolute;
+        top: 100%;
+        left: 50%;
+        margin-left: -5px;
+        border-width: 5px;
+        border-style: solid;
+        border-color: #38bdf8 transparent transparent transparent;
+    }
+    .hover-word:hover .tip {
+        visibility: visible;
+        opacity: 1;
+        transform: translateX(-50%) translateY(-2px);
+    }
+    .example-es {
+        margin-top: 0.5rem;
+        font-size: 0.98rem;
+        color: #cbd5e1;
+    }
+    .example-phonetics {
+        margin-top: 0.45rem;
+        font-size: 0.92rem;
+        color: #fef08a;
+        background: rgba(254, 240, 138, 0.08);
+        padding: 0.35rem 0.65rem;
+        border-radius: 6px;
+        border: 1px dashed rgba(250, 204, 21, 0.35);
+        display: inline-block;
+    }
+    .phonetic-badge {
+        font-weight: 600;
+        letter-spacing: 0.3px;
+        color: #fde047;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -487,8 +574,26 @@ elif menu == "🎓 Clases por Niveles (A1 ➔ C1)":
                 st.code(lesson["formula"], language="text")
 
             st.markdown("#### 🗣️ Ejemplos de la Vida Real:")
-            for eg in lesson["examples"]:
-                st.markdown(f"• 🇬🇧 **{eg['en']}**\n  \n  🇪🇸 _{eg['es']}_")
+            st.caption("💡 *Pasa el mouse sobre cualquier palabra en inglés para ver su traducción. Haz clic en 🔊 para escuchar su pronunciación nativa.*")
+
+            for idx, eg in enumerate(lesson["examples"]):
+                col_ex_card, col_ex_btn = st.columns([3.8, 1.2])
+                with col_ex_card:
+                    html_code = build_interactive_example_html(eg)
+                    st.markdown(html_code, unsafe_allow_html=True)
+                with col_ex_btn:
+                    st.markdown("<div style='height: 12px;'></div>", unsafe_allow_html=True)
+                    audio_state_key = f"play_aud_{lesson['id']}_{idx}"
+                    is_audio_open = st.session_state.get(audio_state_key, False)
+                    btn_label = "⏹️ Cerrar" if is_audio_open else "🔊 Escuchar"
+                    if st.button(btn_label, key=f"btn_{audio_state_key}", use_container_width=True):
+                        st.session_state[audio_state_key] = not is_audio_open
+                        st.rerun()
+
+                    if st.session_state.get(audio_state_key):
+                        audio_path = get_audio_for_text(eg["en"])
+                        if audio_path and os.path.exists(audio_path):
+                            st.audio(audio_path, format="audio/mp3", autoplay=True)
 
             mst = lesson.get("common_mistake")
             if mst:

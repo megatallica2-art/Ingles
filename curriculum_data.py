@@ -1,5 +1,55 @@
 # curriculum_data.py
 # Plan de estudios estructurado por niveles y subniveles del Marco Común Europeo (CEFR)
+import os
+import hashlib
+import requests
+
+def get_audio_for_text(text: str) -> str:
+    """Retorna la ruta al archivo MP3 de audio en data/audio/<hash>.mp3. Si no existe, lo descarga y almacena en caché."""
+    os.makedirs(os.path.join("data", "audio"), exist_ok=True)
+    fn = hashlib.md5(text.encode("utf-8")).hexdigest() + ".mp3"
+    path = os.path.join("data", "audio", fn)
+    if not os.path.exists(path):
+        try:
+            url = "https://translate.google.com/translate_tts?ie=UTF-8&tl=en&client=tw-ob&q=" + requests.utils.quote(text)
+            r = requests.get(url, headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}, timeout=8)
+            if r.status_code == 200:
+                with open(path, "wb") as f:
+                    f.write(r.content)
+        except Exception:
+            pass
+    return path if os.path.exists(path) else ""
+
+def build_interactive_example_html(example: dict) -> str:
+    """Construye una tarjeta HTML elegante con tooltips interactivos para cada palabra y fonemas en español."""
+    en_words = example.get("words", [])
+    if not en_words:
+        words_html = f"<span class='hover-word'>{example['en']}</span>"
+    else:
+        spans = []
+        for w_item in en_words:
+            w = w_item.get("w", "")
+            t = w_item.get("t", "")
+            spans.append(f"<span class='hover-word'>{w}<span class='tip'>{t}</span></span>")
+        words_html = " ".join(spans)
+
+    es_text = example.get("es", "")
+    phonetic_es = example.get("phonetic_es", "")
+
+    html = f"""
+    <div class="example-box">
+        <div class="example-en">
+            <span style="font-size:1.1rem; margin-right:5px;">🇬🇧</span> {words_html}
+        </div>
+        <div class="example-es">
+            🇪🇸 <em>{es_text}</em>
+        </div>
+        <div class="example-phonetics">
+            🗣️ <b>Pronunciación en español:</b> <span class="phonetic-badge">/ {phonetic_es} /</span>
+        </div>
+    </div>
+    """
+    return html
 
 CURRICULUM = {
     "A1_A2": {
@@ -26,9 +76,52 @@ En español decimos *'Yo tengo 25 años'*, pero en inglés se dice *'I am 25 yea
                 """,
                 "formula": "Sujeto + am / is / are + complemento",
                 "examples": [
-                    {"en": "Hello! I am Tania, and I'm very excited to learn English.", "es": "¡Hola! Soy Tania y estoy muy emocionada de aprender inglés."},
-                    {"en": "Anderson is a physicist from Colombia.", "es": "Anderson es físico de Colombia."},
-                    {"en": "They are in the library studying right now.", "es": "Ellos están en la biblioteca estudiando ahora mismo."}
+                    {
+                        "en": "Hello! I am Tania, and I'm very excited to learn English.",
+                        "es": "¡Hola! Soy Tania y estoy muy emocionada de aprender inglés.",
+                        "phonetic_es": "Jelóu! Ai am Tania, end aim veri eksáited tu lern ínglish.",
+                        "words": [
+                            {"w": "Hello!", "t": "¡Hola!"},
+                            {"w": "I", "t": "Yo"},
+                            {"w": "am", "t": "soy / estoy"},
+                            {"w": "Tania,", "t": "Tania,"},
+                            {"w": "and", "t": "y"},
+                            {"w": "I'm", "t": "yo estoy"},
+                            {"w": "very", "t": "muy"},
+                            {"w": "excited", "t": "emocionada / entusiasmada"},
+                            {"w": "to", "t": "de / por"},
+                            {"w": "learn", "t": "aprender"},
+                            {"w": "English.", "t": "inglés."}
+                        ]
+                    },
+                    {
+                        "en": "Anderson is a physicist from Colombia.",
+                        "es": "Anderson es físico de Colombia.",
+                        "phonetic_es": "Ánderson is e físisist from Kolómbia.",
+                        "words": [
+                            {"w": "Anderson", "t": "Anderson"},
+                            {"w": "is", "t": "es / está"},
+                            {"w": "a", "t": "un"},
+                            {"w": "physicist", "t": "físico (científico)"},
+                            {"w": "from", "t": "de / proveniente de"},
+                            {"w": "Colombia.", "t": "Colombia."}
+                        ]
+                    },
+                    {
+                        "en": "They are in the library studying right now.",
+                        "es": "Ellos están en la biblioteca estudiando ahora mismo.",
+                        "phonetic_es": "Dei ar in de láibrari stádi-ing ráit náu.",
+                        "words": [
+                            {"w": "They", "t": "Ellos"},
+                            {"w": "are", "t": "están"},
+                            {"w": "in", "t": "en"},
+                            {"w": "the", "t": "la"},
+                            {"w": "library", "t": "biblioteca"},
+                            {"w": "studying", "t": "estudiando"},
+                            {"w": "right", "t": "justo / ahora"},
+                            {"w": "now.", "t": "mismo."}
+                        ]
+                    }
                 ],
                 "common_mistake": {
                     "wrong": "I have 24 years old. / Is very hot today.",
@@ -67,9 +160,48 @@ Para negar o preguntar usamos los auxiliares **Do / Does**:
                 """,
                 "formula": "Afirmativo: Sujeto + Verbo(-s/-es) | Negativo: Sujeto + don't / doesn't + Verbo",
                 "examples": [
-                    {"en": "I wake up at 7:00 AM every morning.", "es": "Me despierto a las 7:00 AM todas las mañanas."},
-                    {"en": "Tania drinks green tea while studying.", "es": "Tania toma té verde mientras estudia."},
-                    {"en": "He doesn't like waking up early on weekends.", "es": "A él no le gusta despertarse temprano los fines de semana."}
+                    {
+                        "en": "I wake up at 7:00 AM every morning.",
+                        "es": "Me despierto a las 7:00 AM todas las mañanas.",
+                        "phonetic_es": "Ai uéik ap at séven ei-em évri mórning.",
+                        "words": [
+                            {"w": "I", "t": "Yo"},
+                            {"w": "wake", "t": "despierto"},
+                            {"w": "up", "t": "arriba (wake up = despertarse)"},
+                            {"w": "at", "t": "a las"},
+                            {"w": "7:00 AM", "t": "siete de la mañana"},
+                            {"w": "every", "t": "cada / todas las"},
+                            {"w": "morning.", "t": "mañana(s)."}
+                        ]
+                    },
+                    {
+                        "en": "Tania drinks green tea while studying.",
+                        "es": "Tania toma té verde mientras estudia.",
+                        "phonetic_es": "Tania drinks grin ti uáil stádi-ing.",
+                        "words": [
+                            {"w": "Tania", "t": "Tania"},
+                            {"w": "drinks", "t": "toma / bebe"},
+                            {"w": "green", "t": "verde"},
+                            {"w": "tea", "t": "té"},
+                            {"w": "while", "t": "mientras"},
+                            {"w": "studying.", "t": "estudia."}
+                        ]
+                    },
+                    {
+                        "en": "He doesn't like waking up early on weekends.",
+                        "es": "A él no le gusta despertarse temprano los fines de semana.",
+                        "phonetic_es": "Ji dásent láik uéiking ap érli on uíkends.",
+                        "words": [
+                            {"w": "He", "t": "A él / Él"},
+                            {"w": "doesn't", "t": "no (auxiliar)"},
+                            {"w": "like", "t": "gusta"},
+                            {"w": "waking", "t": "despertarse"},
+                            {"w": "up", "t": "(waking up = levantarse)"},
+                            {"w": "early", "t": "temprano"},
+                            {"w": "on", "t": "los"},
+                            {"w": "weekends.", "t": "fines de semana."}
+                        ]
+                    }
                 ],
                 "common_mistake": {
                     "wrong": "She doesn't likes coffee.",
@@ -103,9 +235,48 @@ Para iniciar cualquier conversación en un viaje o con amigos necesitas las **Wh
                 """,
                 "formula": "Wh- + Auxiliar (do/does/is/are) + Sujeto + Verbo?",
                 "examples": [
-                    {"en": "Where do you want to travel next year?", "es": "¿A dónde quieres viajar el próximo año?"},
-                    {"en": "Why are you studying English tonight?", "es": "¿Por qué estás estudiando inglés esta noche?"},
-                    {"en": "How do you say this in English?", "es": "¿Cómo se dice esto en inglés?"}
+                    {
+                        "en": "Where do you want to travel next year?",
+                        "es": "¿A dónde quieres viajar el próximo año?",
+                        "phonetic_es": "Uér du iu uónt tu trável nekst íir?",
+                        "words": [
+                            {"w": "Where", "t": "¿Dónde? / ¿A dónde?"},
+                            {"w": "do", "t": "(auxiliar de pregunta)"},
+                            {"w": "you", "t": "tú"},
+                            {"w": "want", "t": "quieres"},
+                            {"w": "to", "t": "(hacia / a)"},
+                            {"w": "travel", "t": "viajar"},
+                            {"w": "next", "t": "próximo / siguiente"},
+                            {"w": "year?", "t": "año?"}
+                        ]
+                    },
+                    {
+                        "en": "Why are you studying English tonight?",
+                        "es": "¿Por qué estás estudiando inglés esta noche?",
+                        "phonetic_es": "Uái ar iu stádi-ing ínglish tunáit?",
+                        "words": [
+                            {"w": "Why", "t": "¿Por qué?"},
+                            {"w": "are", "t": "estás"},
+                            {"w": "you", "t": "tú"},
+                            {"w": "studying", "t": "estudiando"},
+                            {"w": "English", "t": "inglés"},
+                            {"w": "tonight?", "t": "esta noche?"}
+                        ]
+                    },
+                    {
+                        "en": "How do you say this in English?",
+                        "es": "¿Cómo se dice esto en inglés?",
+                        "phonetic_es": "Jáu du iu séi dis in ínglish?",
+                        "words": [
+                            {"w": "How", "t": "¿Cómo?"},
+                            {"w": "do", "t": "(auxiliar de pregunta)"},
+                            {"w": "you", "t": "tú / se"},
+                            {"w": "say", "t": "dices / dice"},
+                            {"w": "this", "t": "esto"},
+                            {"w": "in", "t": "en"},
+                            {"w": "English?", "t": "inglés?"}
+                        ]
+                    }
                 ],
                 "common_mistake": {
                     "wrong": "Where you live? / Why you are sad?",
@@ -151,9 +322,52 @@ El **Past Simple** se usa para acciones que empezaron y terminaron en el pasado 
                 """,
                 "formula": "Afirmativo: Sujeto + Verbo en Pasado | Negativo: Sujeto + didn't + Verbo base",
                 "examples": [
-                    {"en": "Yesterday, we went to a cozy coffee shop and ate delicious pizza.", "es": "Ayer fuimos a un café acogedor y comimos pizza deliciosa."},
-                    {"en": "She didn't sleep well last night.", "es": "Ella no durmió bien anoche."},
-                    {"en": "Did you study with the app yesterday?", "es": "¿Estudiaste con la app ayer?"}
+                    {
+                        "en": "Yesterday, we went to a cozy coffee shop and ate delicious pizza.",
+                        "es": "Ayer fuimos a un café acogedor y comimos pizza deliciosa.",
+                        "phonetic_es": "Iésterdei, ui uént tu e kóusi kófi shop end éit delíshos pítsa.",
+                        "words": [
+                            {"w": "Yesterday,", "t": "Ayer,"},
+                            {"w": "we", "t": "nosotros"},
+                            {"w": "went", "t": "fuimos (pasado de go)"},
+                            {"w": "to", "t": "a"},
+                            {"w": "a", "t": "un"},
+                            {"w": "cozy", "t": "acogedor / cálido"},
+                            {"w": "coffee", "t": "café"},
+                            {"w": "shop", "t": "tienda (cafetería)"},
+                            {"w": "and", "t": "y"},
+                            {"w": "ate", "t": "comimos (pasado de eat)"},
+                            {"w": "delicious", "t": "deliciosa"},
+                            {"w": "pizza.", "t": "pizza."}
+                        ]
+                    },
+                    {
+                        "en": "She didn't sleep well last night.",
+                        "es": "Ella no durmió bien anoche.",
+                        "phonetic_es": "Shi dídent slip uél last náit.",
+                        "words": [
+                            {"w": "She", "t": "Ella"},
+                            {"w": "didn't", "t": "no (pasado)"},
+                            {"w": "sleep", "t": "durmió"},
+                            {"w": "well", "t": "bien"},
+                            {"w": "last", "t": "la pasada"},
+                            {"w": "night.", "t": "noche (anoche)."}
+                        ]
+                    },
+                    {
+                        "en": "Did you study with the app yesterday?",
+                        "es": "¿Estudiaste con la app ayer?",
+                        "phonetic_es": "Did iu stádi uid de ap iésterdei?",
+                        "words": [
+                            {"w": "Did", "t": "¿(auxiliar pasado)?"},
+                            {"w": "you", "t": "tú"},
+                            {"w": "study", "t": "estudiaste"},
+                            {"w": "with", "t": "con"},
+                            {"w": "the", "t": "la"},
+                            {"w": "app", "t": "aplicación"},
+                            {"w": "yesterday?", "t": "ayer?"}
+                        ]
+                    }
                 ],
                 "common_mistake": {
                     "wrong": "Yesterday I didn't went to the gym.",
@@ -192,8 +406,40 @@ Hay dos formas principales de hablar del futuro en inglés:
                 """,
                 "formula": "Going to: Sujeto + am/is/are + going to + verbo | Will: Sujeto + will + verbo",
                 "examples": [
-                    {"en": "Tania and Anderson are going to travel abroad next year.", "es": "Tania y Anderson van a viajar al extranjero el próximo año."},
-                    {"en": "Don't worry, I will help you with your English practice!", "es": "¡No te preocupes, yo te ayudaré con tu práctica de inglés!"}
+                    {
+                        "en": "Tania and Anderson are going to travel abroad next year.",
+                        "es": "Tania y Anderson van a viajar al extranjero el próximo año.",
+                        "phonetic_es": "Tania end Ánderson ar góing tu trável ebród nekst íir.",
+                        "words": [
+                            {"w": "Tania", "t": "Tania"},
+                            {"w": "and", "t": "y"},
+                            {"w": "Anderson", "t": "Anderson"},
+                            {"w": "are", "t": "están"},
+                            {"w": "going", "t": "yendo"},
+                            {"w": "to", "t": "a (are going to = van a)"},
+                            {"w": "travel", "t": "viajar"},
+                            {"w": "abroad", "t": "al extranjero"},
+                            {"w": "next", "t": "próximo"},
+                            {"w": "year.", "t": "año."}
+                        ]
+                    },
+                    {
+                        "en": "Don't worry, I will help you with your English practice!",
+                        "es": "¡No te preocupes, yo te ayudaré con tu práctica de inglés!",
+                        "phonetic_es": "Dóunt uórri, ai uil jelp iu uid ior ínglish práktis!",
+                        "words": [
+                            {"w": "Don't", "t": "No"},
+                            {"w": "worry,", "t": "te preocupes,"},
+                            {"w": "I", "t": "yo"},
+                            {"w": "will", "t": "(futuro: -ré)"},
+                            {"w": "help", "t": "ayudaré"},
+                            {"w": "you", "t": "a ti"},
+                            {"w": "with", "t": "con"},
+                            {"w": "your", "t": "tu"},
+                            {"w": "English", "t": "inglés"},
+                            {"w": "practice!", "t": "práctica!"}
+                        ]
+                    }
                 ],
                 "common_mistake": {
                     "wrong": "I will travel tomorrow because I bought the ticket last month.",
@@ -239,9 +485,48 @@ Lo usamos para hablar de **experiencias de vida** cuando el momento exacto no im
                 """,
                 "formula": "Sujeto + have/has + participio pasado",
                 "examples": [
-                    {"en": "Have you ever traveled to another country?", "es": "¿Alguna vez has viajado a otro país?"},
-                    {"en": "I have studied English for three months now.", "es": "He estudiado inglés durante tres meses hasta ahora."},
-                    {"en": "She hasn't seen that movie yet.", "es": "Ella todavía no ha visto esa película."}
+                    {
+                        "en": "Have you ever traveled to another country?",
+                        "es": "¿Alguna vez has viajado a otro país?",
+                        "phonetic_es": "Jav iu éver tráveld tu anóder kántri?",
+                        "words": [
+                            {"w": "Have", "t": "Has"},
+                            {"w": "you", "t": "tú"},
+                            {"w": "ever", "t": "alguna vez"},
+                            {"w": "traveled", "t": "viajado"},
+                            {"w": "to", "t": "a"},
+                            {"w": "another", "t": "otro"},
+                            {"w": "country?", "t": "país?"}
+                        ]
+                    },
+                    {
+                        "en": "I have studied English for three months now.",
+                        "es": "He estudiado inglés durante tres meses hasta ahora.",
+                        "phonetic_es": "Ai jav stádid ínglish for zri monts náu.",
+                        "words": [
+                            {"w": "I", "t": "Yo"},
+                            {"w": "have", "t": "he"},
+                            {"w": "studied", "t": "estudiado"},
+                            {"w": "English", "t": "inglés"},
+                            {"w": "for", "t": "por / durante"},
+                            {"w": "three", "t": "tres"},
+                            {"w": "months", "t": "meses"},
+                            {"w": "now.", "t": "ahora."}
+                        ]
+                    },
+                    {
+                        "en": "She hasn't seen that movie yet.",
+                        "es": "Ella todavía no ha visto esa película.",
+                        "phonetic_es": "Shi jásent sin dat múvi iét.",
+                        "words": [
+                            {"w": "She", "t": "Ella"},
+                            {"w": "hasn't", "t": "no ha"},
+                            {"w": "seen", "t": "visto"},
+                            {"w": "that", "t": "esa"},
+                            {"w": "movie", "t": "película"},
+                            {"w": "yet.", "t": "todavía / aún."}
+                        ]
+                    }
                 ],
                 "common_mistake": {
                     "wrong": "Did you ever went to New York?",
@@ -277,8 +562,41 @@ Esta es la diferencia que separa a los estudiantes principiantes de los intermed
                 """,
                 "formula": "Tiempo específico ➔ Past Simple | Tiempo abierto/experiencia ➔ Present Perfect",
                 "examples": [
-                    {"en": "I lost my keys! I can't enter my home right now.", "es": "¡He perdido mis llaves! No puedo entrar a casa ahora mismo."},
-                    {"en": "I lost my keys yesterday, but my brother found them.", "es": "Perdí mis llaves ayer, pero mi hermano las encontró."}
+                    {
+                        "en": "I lost my keys! I can't enter my home right now.",
+                        "es": "¡He perdido mis llaves! No puedo entrar a casa ahora mismo.",
+                        "phonetic_es": "Ai lost mai kis! Ai kent énter mai jóum ráit náu.",
+                        "words": [
+                            {"w": "I", "t": "Yo"},
+                            {"w": "lost", "t": "perdí / he perdido"},
+                            {"w": "my", "t": "mis"},
+                            {"w": "keys!", "t": "llaves!"},
+                            {"w": "I", "t": "Yo"},
+                            {"w": "can't", "t": "no puedo"},
+                            {"w": "enter", "t": "entrar a"},
+                            {"w": "my", "t": "mi"},
+                            {"w": "home", "t": "casa / hogar"},
+                            {"w": "right", "t": "ahora"},
+                            {"w": "now.", "t": "mismo."}
+                        ]
+                    },
+                    {
+                        "en": "I lost my keys yesterday, but my brother found them.",
+                        "es": "Perdí mis llaves ayer, pero mi hermano las encontró.",
+                        "phonetic_es": "Ai lost mai kis iésterdei, bat mai bróder fáund dem.",
+                        "words": [
+                            {"w": "I", "t": "Yo"},
+                            {"w": "lost", "t": "perdí"},
+                            {"w": "my", "t": "mis"},
+                            {"w": "keys", "t": "llaves"},
+                            {"w": "yesterday,", "t": "ayer,"},
+                            {"w": "but", "t": "pero"},
+                            {"w": "my", "t": "mi"},
+                            {"w": "brother", "t": "hermano"},
+                            {"w": "found", "t": "encontró"},
+                            {"w": "them.", "t": "las / a ellas."}
+                        ]
+                    }
                 ],
                 "common_mistake": {
                     "wrong": "I have seen him yesterday.",
@@ -315,8 +633,41 @@ Esta es la diferencia que separa a los estudiantes principiantes de los intermed
                 """,
                 "formula": "Tipo 1: If + present, will + base | Tipo 2: If + past, would + base",
                 "examples": [
-                    {"en": "If we leave early, we will avoid traffic.", "es": "Si salimos temprano, evitaremos el tráfico."},
-                    {"en": "If I won the lottery, I would travel around the world with Tania.", "es": "Si ganara la lotería, viajaría por el mundo con Tania."}
+                    {
+                        "en": "If we leave early, we will avoid traffic.",
+                        "es": "Si salimos temprano, evitaremos el tráfico.",
+                        "phonetic_es": "If ui liv érli, ui uil evóid tráfik.",
+                        "words": [
+                            {"w": "If", "t": "Si (condición)"},
+                            {"w": "we", "t": "nosotros"},
+                            {"w": "leave", "t": "salimos / partimos"},
+                            {"w": "early,", "t": "temprano,"},
+                            {"w": "we", "t": "nosotros"},
+                            {"w": "will", "t": "(futuro: -emos)"},
+                            {"w": "avoid", "t": "evitaremos"},
+                            {"w": "traffic.", "t": "tráfico."}
+                        ]
+                    },
+                    {
+                        "en": "If I won the lottery, I would travel around the world with Tania.",
+                        "es": "Si ganara la lotería, viajaría por el mundo con Tania.",
+                        "phonetic_es": "If ai uón de lóteri, ai uúd trável eráund de uórld uid Tania.",
+                        "words": [
+                            {"w": "If", "t": "Si"},
+                            {"w": "I", "t": "yo"},
+                            {"w": "won", "t": "ganara (pasado de win)"},
+                            {"w": "the", "t": "la"},
+                            {"w": "lottery,", "t": "lotería,"},
+                            {"w": "I", "t": "yo"},
+                            {"w": "would", "t": "(terminación -ía)"},
+                            {"w": "travel", "t": "viajaría"},
+                            {"w": "around", "t": "alrededor de"},
+                            {"w": "the", "t": "el"},
+                            {"w": "world", "t": "mundo"},
+                            {"w": "with", "t": "con"},
+                            {"w": "Tania.", "t": "Tania."}
+                        ]
+                    }
                 ],
                 "common_mistake": {
                     "wrong": "If I will study, I will pass the exam.",
@@ -362,8 +713,36 @@ En inglés profesional y científico, la **Voz Pasiva** es fundamental porque tr
                 """,
                 "formula": "Sujeto receptor + to be + participio pasado (+ by agente)",
                 "examples": [
-                    {"en": "The experimental protocol was modified to reduce measurement errors.", "es": "El protocolo experimental fue modificado para reducir errores de medición."},
-                    {"en": "Our new website has been launched successfully.", "es": "Nuestro nuevo sitio web ha sido lanzado exitosamente."}
+                    {
+                        "en": "The experimental protocol was modified to reduce measurement errors.",
+                        "es": "El protocolo experimental fue modificado para reducir errores de medición.",
+                        "phonetic_es": "De eksperiméntal prótokol uós módifaid tu rediús mésherment érrors.",
+                        "words": [
+                            {"w": "The", "t": "El"},
+                            {"w": "experimental", "t": "experimental"},
+                            {"w": "protocol", "t": "protocolo"},
+                            {"w": "was", "t": "fue"},
+                            {"w": "modified", "t": "modificado"},
+                            {"w": "to", "t": "para"},
+                            {"w": "reduce", "t": "reducir"},
+                            {"w": "measurement", "t": "de medición"},
+                            {"w": "errors.", "t": "errores."}
+                        ]
+                    },
+                    {
+                        "en": "Our new website has been launched successfully.",
+                        "es": "Nuestro nuevo sitio web ha sido lanzado exitosamente.",
+                        "phonetic_es": "Áur niu uébsait jas bin lóncht saksésfuli.",
+                        "words": [
+                            {"w": "Our", "t": "Nuestro"},
+                            {"w": "new", "t": "nuevo"},
+                            {"w": "website", "t": "sitio web"},
+                            {"w": "has", "t": "ha"},
+                            {"w": "been", "t": "sido"},
+                            {"w": "launched", "t": "lanzado"},
+                            {"w": "successfully.", "t": "exitosamente."}
+                        ]
+                    }
                 ],
                 "common_mistake": {
                     "wrong": "The emails was sent this morning.",
@@ -396,8 +775,45 @@ El **Third Conditional** analiza hipótesis imposibles porque el pasado ya no se
                 """,
                 "formula": "If + had + participio, would have + participio",
                 "examples": [
-                    {"en": "If I had known about this application earlier, I would have practiced much more.", "es": "Si hubiera sabido de esta aplicación antes, habría practicado mucho más."},
-                    {"en": "She wouldn't have gotten lost if she had checked Google Maps.", "es": "Ella no se habría perdido si hubiera mirado Google Maps."}
+                    {
+                        "en": "If I had known about this application earlier, I would have practiced much more.",
+                        "es": "Si hubiera sabido de esta aplicación antes, habría practicado mucho más.",
+                        "phonetic_es": "If ai jad nóun ebáut dis aplikéishon érli-er, ai uúd jav práktist mach mor.",
+                        "words": [
+                            {"w": "If", "t": "Si"},
+                            {"w": "I", "t": "yo"},
+                            {"w": "had", "t": "hubiera"},
+                            {"w": "known", "t": "sabido"},
+                            {"w": "about", "t": "sobre / de"},
+                            {"w": "this", "t": "esta"},
+                            {"w": "application", "t": "aplicación"},
+                            {"w": "earlier,", "t": "antes / más temprano,"},
+                            {"w": "I", "t": "yo"},
+                            {"w": "would", "t": "habría"},
+                            {"w": "have", "t": "habría"},
+                            {"w": "practiced", "t": "practicado"},
+                            {"w": "much", "t": "mucho"},
+                            {"w": "more.", "t": "más."}
+                        ]
+                    },
+                    {
+                        "en": "She wouldn't have gotten lost if she had checked Google Maps.",
+                        "es": "Ella no se habría perdido si hubiera mirado Google Maps.",
+                        "phonetic_es": "Shi uúdent jav góten lost if shi jad chekt Gúgel Maps.",
+                        "words": [
+                            {"w": "She", "t": "Ella"},
+                            {"w": "wouldn't", "t": "no habría"},
+                            {"w": "have", "t": "(have gotten lost = perdido)"},
+                            {"w": "gotten", "t": "llegado a estar"},
+                            {"w": "lost", "t": "perdida"},
+                            {"w": "if", "t": "si"},
+                            {"w": "she", "t": "ella"},
+                            {"w": "had", "t": "hubiera"},
+                            {"w": "checked", "t": "revisado / verificado"},
+                            {"w": "Google", "t": "Google"},
+                            {"w": "Maps.", "t": "Maps."}
+                        ]
+                    }
                 ],
                 "common_mistake": {
                     "wrong": "If I would have known, I would have told you.",
@@ -442,8 +858,44 @@ Los examinadores del IELTS y revisores de papers aman la **Inversión Sintáctic
                 """,
                 "formula": "Adverbio negativo + Auxiliar + Sujeto + Verbo principal + Resto",
                 "examples": [
-                    {"en": "Not only does quantum entanglement challenge classical physics, but it also enables quantum cryptography.", "es": "El entrelazamiento cuántico no solo desafía la física clásica, sino que también posibilita la criptografía cuántica."},
-                    {"en": "Seldom have researchers observed such anomalous behavior in superconducting materials.", "es": "Raras veces los investigadores han observado un comportamiento tan anómalo en materiales superconductores."}
+                    {
+                        "en": "Not only does quantum entanglement challenge classical physics, but it also enables quantum cryptography.",
+                        "es": "El entrelazamiento cuántico no solo desafía la física clásica, sino que también posibilita la criptografía cuántica.",
+                        "phonetic_es": "Not óunli das kuántom entánguelment chálench klásikal físiks, bat it ólsou enéibels kuántom kriptógrafi.",
+                        "words": [
+                            {"w": "Not", "t": "No"},
+                            {"w": "only", "t": "solamente"},
+                            {"w": "does", "t": "(auxiliar de inversión)"},
+                            {"w": "quantum", "t": "cuántico"},
+                            {"w": "entanglement", "t": "entrelazamiento"},
+                            {"w": "challenge", "t": "desafía"},
+                            {"w": "classical", "t": "clásica"},
+                            {"w": "physics,", "t": "física,"},
+                            {"w": "but", "t": "pero / sino que"},
+                            {"w": "it", "t": "ello / esto"},
+                            {"w": "also", "t": "también"},
+                            {"w": "enables", "t": "habilita / posibilita"},
+                            {"w": "quantum", "t": "cuántica"},
+                            {"w": "cryptography.", "t": "criptografía."}
+                        ]
+                    },
+                    {
+                        "en": "Seldom have researchers observed such anomalous behavior in superconducting materials.",
+                        "es": "Raras veces los investigadores han observado un comportamiento tan anómalo en materiales superconductores.",
+                        "phonetic_es": "Séldom jav risérchers obsérvd sach anómalos bijéivior in súperkondákting matírials.",
+                        "words": [
+                            {"w": "Seldom", "t": "Raras veces / Pocas veces"},
+                            {"w": "have", "t": "han (inversión)"},
+                            {"w": "researchers", "t": "investigadores"},
+                            {"w": "observed", "t": "observado"},
+                            {"w": "such", "t": "tal / tan"},
+                            {"w": "anomalous", "t": "anómalo / inusual"},
+                            {"w": "behavior", "t": "comportamiento"},
+                            {"w": "in", "t": "en"},
+                            {"w": "superconducting", "t": "superconductores"},
+                            {"w": "materials.", "t": "materiales."}
+                        ]
+                    }
                 ],
                 "common_mistake": {
                     "wrong": "Not only the experiment confirmed, but also...",
@@ -477,8 +929,45 @@ El **Hedging** consiste en suavizar las afirmaciones con elegancia:
                 """,
                 "formula": "Sujeto + appears to / tends to / suggests that + verbo",
                 "examples": [
-                    {"en": "The preliminary data appear to indicate a non-negligible correlation between temperature and dissipation rates.", "es": "Los datos preliminares parecen indicar una correlación no despreciable entre la temperatura y las tasas de disipación."},
-                    {"en": "It is widely acknowledged that peer review, whilst imperfect, remains indispensable.", "es": "Es ampliamente reconocido que la revisión por pares, si bien imperfecta, sigue siendo indispensable."}
+                    {
+                        "en": "The preliminary data appear to indicate a non-negligible correlation between temperature and dissipation rates.",
+                        "es": "Los datos preliminares parecen indicar una correlación no despreciable entre la temperatura y las tasas de disipación.",
+                        "phonetic_es": "De prilíminari déita apíir tu índikeit e non-néglidjibel korreléishon bituín témprecher end disipéishon réits.",
+                        "words": [
+                            {"w": "The", "t": "Los"},
+                            {"w": "preliminary", "t": "preliminares"},
+                            {"w": "data", "t": "datos"},
+                            {"w": "appear", "t": "parecen"},
+                            {"w": "to", "t": "a"},
+                            {"w": "indicate", "t": "indicar"},
+                            {"w": "a", "t": "una"},
+                            {"w": "non-negligible", "t": "no despreciable (significativa)"},
+                            {"w": "correlation", "t": "correlación"},
+                            {"w": "between", "t": "entre"},
+                            {"w": "temperature", "t": "temperatura"},
+                            {"w": "and", "t": "y"},
+                            {"w": "dissipation", "t": "disipación"},
+                            {"w": "rates.", "t": "tasas / ritmos."}
+                        ]
+                    },
+                    {
+                        "en": "It is widely acknowledged that peer review, whilst imperfect, remains indispensable.",
+                        "es": "Es ampliamente reconocido que la revisión por pares, si bien imperfecta, sigue siendo indispensable.",
+                        "phonetic_es": "It is uáidli aknóledcht dat píir reviu, uáilst impérfekt, riméins indispénsabel.",
+                        "words": [
+                            {"w": "It", "t": "(Sujeto formal)"},
+                            {"w": "is", "t": "es"},
+                            {"w": "widely", "t": "ampliamente"},
+                            {"w": "acknowledged", "t": "reconocido / aceptado"},
+                            {"w": "that", "t": "que"},
+                            {"w": "peer", "t": "pares (iguales)"},
+                            {"w": "review,", "t": "revisión,"},
+                            {"w": "whilst", "t": "si bien / mientras que"},
+                            {"w": "imperfect,", "t": "imperfecta,"},
+                            {"w": "remains", "t": "sigue siendo / permanece"},
+                            {"w": "indispensable.", "t": "indispensable."}
+                        ]
+                    }
                 ],
                 "common_mistake": {
                     "wrong": "This experiment proves 100% that Einstein was right.",
