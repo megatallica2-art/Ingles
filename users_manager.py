@@ -2,10 +2,67 @@ import os
 import json
 import hashlib
 import secrets
-from datetime import datetime, date, timedelta
+from datetime import datetime, date, timedelta, timezone
+try:
+    from zoneinfo import ZoneInfo
+except ImportError:
+    ZoneInfo = None
 
 USERS_DATA_FILE = os.path.join("logs", "couple_tracker.json")
 LEGACY_TRACKER_FILE = os.path.join("logs", "time_tracker.json")
+
+SUPPORTED_TIMEZONES = {
+    "America/Bogota": "Colombia / Perú / Ecuador / Panamá (UTC-5)",
+    "America/Lima": "Perú (UTC-5)",
+    "America/Mexico_City": "México (Centro) (UTC-6)",
+    "America/Santiago": "Chile (UTC-4 / UTC-3)",
+    "America/Buenos_Aires": "Argentina (UTC-3)",
+    "America/Caracas": "Venezuela (UTC-4)",
+    "America/La_Paz": "Bolivia (UTC-4)",
+    "America/Montevideo": "Uruguay (UTC-3)",
+    "America/Madrid": "España (UTC+1 / UTC+2)",
+    "America/New_York": "EE.UU. (Eastern) (UTC-5 / UTC-4)",
+    "UTC": "Tiempo Universal Coordinado (UTC)"
+}
+DEFAULT_TIMEZONE = "America/Bogota"
+
+def get_user_now(tz_identifier="America/Bogota") -> datetime:
+    """Retorna la fecha y hora actual en la zona horaria del usuario o región especificada."""
+    if isinstance(tz_identifier, dict):
+        tz_identifier = tz_identifier.get("timezone", DEFAULT_TIMEZONE)
+    tz_name = tz_identifier or DEFAULT_TIMEZONE
+
+    if ZoneInfo is not None:
+        try:
+            return datetime.now(ZoneInfo(tz_name))
+        except Exception:
+            pass
+    # Fallback si no está disponible la zona horaria: usar offset UTC-5
+    try:
+        return datetime.now(timezone(timedelta(hours=-5)))
+    except Exception:
+        return datetime.now()
+
+def get_user_today(tz_identifier="America/Bogota") -> date:
+    """Retorna la fecha de hoy según la región del usuario."""
+    return get_user_now(tz_identifier).date()
+
+def format_user_timestamp(iso_str: str, tz_identifier="America/Bogota") -> str:
+    """Formatea una fecha ISO para mostrarla de forma legible en la zona del usuario."""
+    if not iso_str:
+        return ""
+    try:
+        dt = datetime.fromisoformat(iso_str)
+        if dt.tzinfo and ZoneInfo is not None:
+            tz_name = tz_identifier if isinstance(tz_identifier, str) else tz_identifier.get("timezone", DEFAULT_TIMEZONE)
+            try:
+                dt = dt.astimezone(ZoneInfo(tz_name))
+            except Exception:
+                pass
+        return dt.strftime("%d/%m/%Y %I:%M %p")
+    except Exception:
+        return iso_str[:16].replace("T", " ")
+
 
 AVAILABLE_TRACKS = {
     "conversational": {
@@ -101,6 +158,7 @@ def get_default_users_dict() -> dict:
             "emoji": "🔬",
             "role_title": "Física & IELTS Academic (Ruta C1)",
             "track": "academic",
+            "timezone": DEFAULT_TIMEZONE,
             "target_hours": 700.0,
             "cefr_target": "C1",
             "tone": "academic",
@@ -112,7 +170,8 @@ def get_default_users_dict() -> dict:
             "categories": AVAILABLE_TRACKS["academic"]["default_categories"],
             "total_minutes": 0,
             "total_hours": 0.0,
-            "sessions": []
+            "sessions": [],
+            "completed_lessons": []
         },
         "tania": {
             "id": "tania",
@@ -124,6 +183,7 @@ def get_default_users_dict() -> dict:
             "emoji": "✨",
             "role_title": "Inglés Práctico & Conversación",
             "track": "conversational",
+            "timezone": DEFAULT_TIMEZONE,
             "target_hours": 200.0,
             "cefr_target": "B2 / Fluidez",
             "tone": "conversational",
@@ -135,7 +195,8 @@ def get_default_users_dict() -> dict:
             "categories": AVAILABLE_TRACKS["conversational"]["default_categories"],
             "total_minutes": 0,
             "total_hours": 0.0,
-            "sessions": []
+            "sessions": [],
+            "completed_lessons": []
         }
     }
 
@@ -186,6 +247,10 @@ def load_couple_data() -> dict:
                         u["interests"] = defaults[uid]["interests"]
                     if not u.get("track"):
                         u["track"] = defaults[uid]["track"]
+                    if not u.get("timezone"):
+                        u["timezone"] = DEFAULT_TIMEZONE
+                    if "completed_lessons" not in u:
+                        u["completed_lessons"] = []
                     if not u.get("security_question"):
                         u["security_question"] = defaults[uid]["security_question"]
                         u["security_answer_hash"] = defaults[uid]["security_answer_hash"]
@@ -197,6 +262,10 @@ def load_couple_data() -> dict:
                     u["total_hours"] = round(t_min / 60.0, 2)
 
             for uid, u in users.items():
+                if not u.get("timezone"):
+                    u["timezone"] = DEFAULT_TIMEZONE
+                if "completed_lessons" not in u:
+                    u["completed_lessons"] = []
                 if not u.get("security_question"):
                     u["security_question"] = "¿Cuál es tu palabra o comida favorita?"
                     u["security_answer_hash"] = hashlib.sha256("ingles".encode("utf-8")).hexdigest()
@@ -230,7 +299,7 @@ def authenticate_user(username: str, password: str):
                 return u
     return None
 
-def register_guest(username: str, password: str, display_name: str, track_choice: str = "conversational", target_hours: float = 100.0, interests_list: list = None, security_question: str = "¿Cuál es tu palabra o comida favorita?", security_answer: str = "ingles", recovery_pin: str = "1234"):
+def register_guest(username: str, password: str, display_name: str, track_choice: str = "conversational", target_hours: float = 100.0, interests_list: list = None, security_question: str = "¿Cuál es tu palabra o comida favorita?", security_answer: str = "ingles", recovery_pin: str = "1234", timezone_choice: str = DEFAULT_TIMEZONE):
     data = load_couple_data()
     users = data.get("users", {})
     
@@ -252,6 +321,7 @@ def register_guest(username: str, password: str, display_name: str, track_choice
     ans_hash = hashlib.sha256(security_answer.strip().lower().encode("utf-8")).hexdigest()
     pin_clean = recovery_pin.strip() if recovery_pin.strip() else "1234"
     track_info = AVAILABLE_TRACKS.get(track_choice, AVAILABLE_TRACKS["conversational"])
+    tz_clean = timezone_choice if timezone_choice in SUPPORTED_TIMEZONES else DEFAULT_TIMEZONE
 
     new_user = {
         "id": new_id,
@@ -263,6 +333,7 @@ def register_guest(username: str, password: str, display_name: str, track_choice
         "emoji": "🌟",
         "role_title": track_info["title"],
         "track": track_choice,
+        "timezone": tz_clean,
         "target_hours": float(target_hours),
         "cefr_target": "Fluidez Personal",
         "tone": track_info["tone"],
@@ -274,7 +345,8 @@ def register_guest(username: str, password: str, display_name: str, track_choice
         "categories": track_info["default_categories"],
         "total_minutes": 0,
         "total_hours": 0.0,
-        "sessions": []
+        "sessions": [],
+        "completed_lessons": []
     }
 
     data["users"][new_id] = new_user
@@ -369,7 +441,7 @@ def update_user_security(user_id: str, new_question: str, new_answer: str, new_p
     save_couple_data(data)
     return True
 
-def update_user_profile(user_id: str, display_name: str, emoji: str, track: str, target_hours: float, interests: list):
+def update_user_profile(user_id: str, display_name: str, emoji: str, track: str, target_hours: float, interests: list, timezone_str: str = None):
     data = load_couple_data()
     u = data["users"].get(user_id)
     if not u:
@@ -379,6 +451,8 @@ def update_user_profile(user_id: str, display_name: str, emoji: str, track: str,
     u["emoji"] = emoji.strip() or "👤"
     u["target_hours"] = float(target_hours)
     u["interests"] = [i.strip() for i in interests if i.strip()]
+    if timezone_str and timezone_str in SUPPORTED_TIMEZONES:
+        u["timezone"] = timezone_str
     
     # Si cambió de track, actualizar categorías y fases
     if track != u.get("track") and track in AVAILABLE_TRACKS:
@@ -430,7 +504,9 @@ def log_user_session(user_id: str, minutes: int, category: str, description: str
     if not user_data:
         return {}
 
-    now_iso = datetime.now().isoformat()
+    user_tz = user_data.get("timezone", DEFAULT_TIMEZONE)
+    now_dt = get_user_now(user_tz)
+    now_iso = now_dt.isoformat()
     entry = {
         "timestamp": now_iso,
         "minutes": minutes,
@@ -438,7 +514,7 @@ def log_user_session(user_id: str, minutes: int, category: str, description: str
         "description": description,
         "notes": notes
     }
-    user_data["sessions"].append(entry)
+    user_data.setdefault("sessions", []).append(entry)
     user_data["total_minutes"] = sum(s.get("minutes", 0) for s in user_data["sessions"])
     user_data["total_hours"] = round(user_data["total_minutes"] / 60.0, 2)
     save_couple_data(data)
@@ -453,19 +529,49 @@ def log_user_session(user_id: str, minutes: int, category: str, description: str
 
     return entry
 
-def log_user_evaluation(user_id: str, submission_type: str, text: str, metrics: dict):
+def log_user_evaluation(user_id: str, submission_type: str, text: str, metrics: dict, minutes_credited: int = 10) -> dict:
+    """Registra la evaluación de Gemini IA y automáticamente acredita minutos de estudio al usuario."""
     data = load_couple_data()
     user_data = data["users"].get(user_id, {})
+    user_tz = user_data.get("timezone", DEFAULT_TIMEZONE)
+    now_dt = get_user_now(user_tz)
+    now_iso = now_dt.isoformat()
     entry = {
         "user_id": user_id,
         "user_name": user_data.get("display_name", user_id),
-        "timestamp": datetime.now().isoformat(),
+        "timestamp": now_iso,
         "type": submission_type,
         "input_text": text,
-        "metrics": metrics
+        "metrics": metrics,
+        "minutes_credited": minutes_credited
     }
     data.setdefault("evaluations", []).append(entry)
     save_couple_data(data)
+
+    # Auto-acreditar minutos de práctica al historial y racha del estudiante
+    if minutes_credited > 0 and user_id in data.get("users", {}):
+        is_oral = "speaking" in submission_type.lower() or "audio" in submission_type.lower()
+        cat = "Conversación & Speaking Libre" if is_oral else "Writing Casual (Mensajes / Emails / Diario)"
+        score = metrics.get('overall_score', metrics.get('overall_band', ''))
+        cefr = metrics.get('cefr_level', '')
+        desc = f"Práctica de {'Speaking con audio' if is_oral else 'Writing'} con Gemini IA"
+        notes = f"Nivel: {cefr} | Calificación: {score}"
+        log_user_session(user_id, minutes_credited, cat, desc, notes)
+
+    # Google Sheets webhook sync de la evaluación si aplica
+    try:
+        from scripts.sheets_sync import sync_evaluation_result
+        sync_evaluation_result(now_iso[:16].replace("T", " "), submission_type, metrics, user_data.get("total_hours", ""))
+    except Exception:
+        pass
+
+    return entry
+
+def get_user_evaluations(user_id: str) -> list:
+    """Retorna las evaluaciones hechas por un usuario específico."""
+    data = load_couple_data()
+    evals = data.get("evaluations", [])
+    return [e for e in evals if e.get("user_id") == user_id]
 
 def get_current_phase_for_user(user_data: dict) -> dict:
     total_h = user_data.get("total_hours", 0.0)
@@ -475,7 +581,8 @@ def get_current_phase_for_user(user_data: dict) -> dict:
             return p
     return phases[-1] if phases else {"phase": 1, "name": "General", "focus": "Práctica general"}
 
-def calculate_streak(sessions: list) -> int:
+def calculate_streak(sessions: list, tz_identifier: str = DEFAULT_TIMEZONE) -> int:
+    """Calcula la racha de días consecutivos estudiando usando la fecha local de la región del usuario."""
     if not sessions:
         return 0
     dates_set = set()
@@ -483,15 +590,15 @@ def calculate_streak(sessions: list) -> int:
         ts = s.get("timestamp", "")
         if ts:
             try:
-                dt = datetime.fromisoformat(ts).date()
-                dates_set.add(dt)
+                dt = datetime.fromisoformat(ts)
+                dates_set.add(dt.date())
             except Exception:
                 continue
 
     if not dates_set:
         return 0
 
-    today = date.today()
+    today = get_user_today(tz_identifier)
     yesterday = today - timedelta(days=1)
     current_check = today if today in dates_set else (yesterday if yesterday in dates_set else None)
     if not current_check:
@@ -517,6 +624,21 @@ def toggle_lesson_completion(user_id: str, lesson_id: str) -> bool:
         is_done = True
     save_couple_data(data)
     return is_done
+
+def mark_lesson_completed(user_id: str, lesson_id: str, lesson_title: str = "", minutes: int = 15) -> tuple[bool, str]:
+    """Marca una lección como completada si no lo estaba, suma minutos y asegura guardado permanente."""
+    data = load_couple_data()
+    u = data["users"].get(user_id)
+    if not u:
+        return False, "Usuario no encontrado."
+    completed = u.setdefault("completed_lessons", [])
+    if lesson_id not in completed:
+        completed.append(lesson_id)
+        save_couple_data(data)
+        desc = f"Completó la clase {lesson_id}: {lesson_title}" if lesson_title else f"Completó la clase {lesson_id}"
+        log_user_session(user_id, minutes, "Clases & Gramática", desc)
+        return True, f"¡Clase {lesson_id} completada exitosamente! Se sumaron {minutes} minutos a tu progreso."
+    return False, f"La clase {lesson_id} ya estaba marcada como aprendida."
 
 def get_user_completed_lessons(user_id: str) -> list:
     data = load_couple_data()

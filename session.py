@@ -148,8 +148,13 @@ def log_session(minutes: int, category: str, description: str, notes: str = ""):
     if minutes <= 0:
         return
     data = load_tracker_data()
+    try:
+        from users_manager import get_user_now
+        now_iso = get_user_now().isoformat()
+    except Exception:
+        now_iso = datetime.now().isoformat()
     entry = {
-        "timestamp": datetime.now().isoformat(),
+        "timestamp": now_iso,
         "minutes": minutes,
         "category": category,
         "description": description,

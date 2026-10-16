@@ -21,11 +21,18 @@ from users_manager import (
     calculate_streak,
     AVAILABLE_TRACKS,
     toggle_lesson_completion,
+    mark_lesson_completed,
     get_user_completed_lessons,
+    get_user_evaluations,
     get_user_security_question,
     reset_password_with_recovery,
     recover_username,
-    update_user_security
+    update_user_security,
+    get_user_now,
+    get_user_today,
+    format_user_timestamp,
+    SUPPORTED_TIMEZONES,
+    DEFAULT_TIMEZONE
 )
 from ai_coach import (
     evaluate_with_ai,
@@ -140,6 +147,13 @@ if not st.session_state["auth_user_id"] or st.session_state["auth_user_id"] not 
                 
                 reg_target = st.number_input("Meta de horas totales de práctica:", min_value=10.0, max_value=1000.0, value=100.0, step=25.0)
                 
+                reg_tz = st.selectbox(
+                    "🌍 Tu Zona Horaria / Región:",
+                    options=list(SUPPORTED_TIMEZONES.keys()),
+                    format_func=lambda k: SUPPORTED_TIMEZONES[k],
+                    index=list(SUPPORTED_TIMEZONES.keys()).index(DEFAULT_TIMEZONE)
+                )
+                
                 st.write("**🛡️ Seguridad para recuperar tu cuenta si olvidas la contraseña:**")
                 reg_sec_q = st.selectbox(
                     "Elige tu Pregunta Secreta de Recuperación:",
@@ -179,7 +193,8 @@ if not st.session_state["auth_user_id"] or st.session_state["auth_user_id"] not 
                             selected_interests,
                             reg_sec_q,
                             reg_sec_a,
-                            reg_pin
+                            reg_pin,
+                            reg_tz
                         )
                         if ok:
                             st.success(msg)
@@ -250,6 +265,9 @@ is_partner = (role == "partner")
 is_couple = is_admin or is_partner
 
 # Sidebar
+curr_tz = curr_user.get("timezone", DEFAULT_TIMEZONE)
+user_now = get_user_now(curr_tz)
+
 with st.sidebar:
     st.markdown(f"### {curr_user.get('emoji', '👤')} {curr_user.get('display_name')}")
     if is_admin:
@@ -261,6 +279,7 @@ with st.sidebar:
 
     st.caption(f"**Enfoque:** {curr_user.get('role_title', 'General')}")
     st.caption(f"🎯 Meta: {curr_user.get('total_hours', 0.0):.1f} / {curr_user.get('target_hours', 100):.0f} h")
+    st.markdown(f"<div style='font-size:0.82rem; color:#94a3b8; margin: 0.3rem 0;'>🕒 <b>{user_now.strftime('%I:%M %p')}</b> • {user_now.strftime('%d/%m/%Y')}<br>📍 <span style='font-size:0.78rem;'>{SUPPORTED_TIMEZONES.get(curr_tz, curr_tz).split('(')[0].strip()}</span></div>", unsafe_allow_html=True)
     st.markdown("---")
 
     # Opciones de menú según el rol
@@ -284,7 +303,7 @@ with st.sidebar:
     menu = st.radio("Navegación:", menu_options)
 
     st.markdown("---")
-    streak = calculate_streak(curr_user.get("sessions", []))
+    streak = calculate_streak(curr_user.get("sessions", []), curr_tz)
     st.metric("Tu Racha Actual", f"{streak} días 🔥")
 
     if st.button("🚪 Cerrar Sesión", use_container_width=True):
@@ -308,8 +327,8 @@ if menu == "💑 Resumen de Pareja (Anderson & Tania)":
     u_tan = users.get("tania", {})
 
     total_couple_hours = u_and.get("total_hours", 0.0) + u_tan.get("total_hours", 0.0)
-    streak_and = calculate_streak(u_and.get("sessions", []))
-    streak_tan = calculate_streak(u_tan.get("sessions", []))
+    streak_and = calculate_streak(u_and.get("sessions", []), u_and.get("timezone", DEFAULT_TIMEZONE))
+    streak_tan = calculate_streak(u_tan.get("sessions", []), u_tan.get("timezone", DEFAULT_TIMEZONE))
 
     c1, c2, c3 = st.columns(3)
     c1.metric("⏳ Horas Totales en Pareja", f"{total_couple_hours:.1f} h")
@@ -341,10 +360,10 @@ if menu == "💑 Resumen de Pareja (Anderson & Tania)":
         ph_tan = get_current_phase_for_user(u_tan)
         st.success(f"📍 **{ph_tan.get('name')}**\n\n_{ph_tan.get('focus')}_")
 
-    # Gráfico 7 días
+    # Gráfico 7 días usando la fecha local
     st.markdown("---")
     st.markdown("### 📈 Actividad Comparativa de los Últimos 7 Días")
-    today = date.today()
+    today = get_user_today(curr_tz)
     last_7 = [today - timedelta(days=i) for i in range(6, -1, -1)]
 
     def get_mins(sessions, days):
@@ -393,7 +412,7 @@ elif menu == "📊 Mi Progreso Personal":
     c1, c2, c3 = st.columns(3)
     c1.metric("Horas Acumuladas", f"{curr_user.get('total_hours', 0.0):.1f} h")
     c2.metric("Meta Total", f"{curr_user.get('target_hours', 100):.0f} h")
-    c3.metric("Racha de Práctica", f"{calculate_streak(curr_user.get('sessions', []))} días 🔥")
+    c3.metric("Racha de Práctica", f"{calculate_streak(curr_user.get('sessions', []), curr_tz)} días 🔥")
 
     h = curr_user.get("total_hours", 0.0)
     tgt = curr_user.get("target_hours", 100.0)
@@ -449,7 +468,7 @@ elif menu == "🎓 Clases por Niveles (A1 ➔ C1)":
             with col_h1:
                 st.markdown(f"**🎯 Objetivo de la clase:** {lesson['objective']}")
             with col_h2:
-                btn_txt = "✅ Completada (desmarcar)" if is_done else "🔘 Marcar como Aprendida"
+                btn_txt = "✅ Completada (Haz clic para desmarcar)" if is_done else "🔘 Marcar como Aprendida"
                 if st.button(btn_txt, key=f"mark_btn_{lesson['id']}", use_container_width=True):
                     new_st = toggle_lesson_completion(curr_user["id"], lesson["id"])
                     if new_st:
@@ -479,12 +498,19 @@ elif menu == "🎓 Clases por Niveles (A1 ➔ C1)":
             qz = lesson.get("quiz")
             if qz:
                 st.markdown("#### 🧠 Comprobación Rápida (Mini-Quiz):")
+                st.caption("✨ *Tip:* Al responder correctamente, la clase se marcará como completada y guardará tu tiempo automáticamente.")
                 st.write(f"**{qz['question']}**")
                 u_pick = st.radio("Selecciona la opción correcta:", qz["options"], key=f"qz_opt_{lesson['id']}")
                 if st.button("Verificar Respuesta", key=f"qz_btn_{lesson['id']}"):
                     p_idx = qz["options"].index(u_pick)
                     if p_idx == qz["answer_idx"]:
                         st.success(f"🎉 ¡Excelente! {qz['feedback']}")
+                        was_marked, mark_msg = mark_lesson_completed(curr_user["id"], lesson["id"], lesson["title"], minutes=15)
+                        if was_marked:
+                            st.balloons()
+                            st.success(f"💾 **¡Progreso guardado automáticamente!** Has completado la Clase {lesson['id']} y sumaste **15 minutos** a tu meta. 🔥")
+                            time.sleep(1.2)
+                            st.rerun()
                     else:
                         correct_ans = qz["options"][qz["answer_idx"]]
                         st.error(f"¡Casi! La respuesta correcta es: **\"{correct_ans}\"**.\n\n{qz['feedback']}")
@@ -502,8 +528,9 @@ elif menu == "🎓 Clases por Niveles (A1 ➔ C1)":
                     else:
                         with st.spinner("Gemini está evaluando tu ejercicio de esta clase..."):
                             e_res = evaluate_with_ai(curr_user, "writing", user_txt)
-                            log_user_evaluation(curr_user["id"], f"Clase {lesson['id']}", user_txt, e_res)
-                            st.success("¡Ejercicio evaluado!")
+                            log_user_evaluation(curr_user["id"], f"Clase {lesson['id']}", user_txt, e_res, minutes_credited=10)
+                            was_marked, mark_msg = mark_lesson_completed(curr_user["id"], lesson["id"], lesson["title"], minutes=15)
+                            st.success("¡Ejercicio evaluado! 💾 **Progreso guardado automáticamente en tu historial.**")
                             
                             if e_res.get("mode") == "academic":
                                 st.write(f"• **Banda IELTS:** {e_res.get('overall_band', 0.0)} / 9.0 | **Nivel:** {e_res.get('cefr_level')}")
@@ -571,10 +598,11 @@ elif menu == "⏱️ Mi Estudio & Cronómetro":
                         st.session_state["timer_active"] = False
                         st.rerun()
             else:
-                st.info("💡 **Consejo de consistencia:** Una sesión de 20 minutos todos los días produce mejores resultados que estudiar muchas horas una sola vez por semana.")
+                st.info("💡 **Consejo de consistencia:** Una sesión de 20 minutos todos los días produce mejores resultados que estudiar muchas horas una sola vez por semana.\n\n⚠️ **Importante:** Recuerda hacer clic en **'⏹️ Terminar y Guardar'** antes de cerrar la pestaña para que tus minutos queden registrados en tu meta.")
 
     with tab_manual:
         st.subheader("Registrar Minutos Estudiados")
+        st.caption(f"📅 Fecha de registro: **{get_user_now(curr_tz).strftime('%d/%m/%Y • %I:%M %p')}** ({SUPPORTED_TIMEZONES.get(curr_tz, curr_tz).split('(')[0].strip()})")
         with st.form("manual_log"):
             man_m = st.number_input("Minutos dedicados:", min_value=1, max_value=360, value=25)
             man_c = st.selectbox("Categoría:", curr_user.get("categories", ["General"]))
@@ -584,7 +612,7 @@ elif menu == "⏱️ Mi Estudio & Cronómetro":
             sub_m = st.form_submit_button("Guardar en mi Historial", use_container_width=True)
             if sub_m:
                 log_user_session(curr_user["id"], man_m, man_c, man_d, man_n)
-                st.success(f"¡{man_m} minutos guardados!")
+                st.success(f"¡{man_m} minutos guardados exitosamente!")
                 time.sleep(1)
                 st.rerun()
 
@@ -593,7 +621,7 @@ elif menu == "⏱️ Mi Estudio & Cronómetro":
     sess = curr_user.get("sessions", [])
     if sess:
         df_s = pd.DataFrame([{
-            "Fecha": s.get("timestamp", "")[:16].replace("T", " "),
+            "Fecha y Hora": format_user_timestamp(s.get("timestamp", ""), curr_tz),
             "Minutos": s.get("minutes", 0),
             "Categoría": s.get("category", ""),
             "Descripción": s.get("description", ""),
@@ -652,8 +680,8 @@ elif menu == "🤖 Evaluador Gemini IA":
                     try:
                         audio_bytes = audio_recorded.read()
                         res_audio = evaluate_speaking_audio(curr_user, audio_bytes)
-                        log_user_evaluation(curr_user["id"], "speaking_audio", res_audio.get("transcript", "Audio en vivo"), res_audio)
-                        st.success("¡Análisis de Speaking completado!")
+                        log_user_evaluation(curr_user["id"], "speaking_audio", res_audio.get("transcript", "Audio en vivo"), res_audio, minutes_credited=10)
+                        st.success("¡Análisis de Speaking completado! 💾 **+10 minutos guardados automáticamente en tu progreso.**")
                         st.markdown("---")
 
                         # Transcripción detectada
@@ -735,8 +763,8 @@ elif menu == "🤖 Evaluador Gemini IA":
                         "writing" if "Writing" in input_method else "speaking",
                         user_input_text
                     )
-                    log_user_evaluation(curr_user["id"], "writing" if "Writing" in input_method else "speaking", user_input_text, res)
-                    st.success("¡Evaluación completada!")
+                    log_user_evaluation(curr_user["id"], "writing" if "Writing" in input_method else "speaking", user_input_text, res, minutes_credited=10)
+                    st.success("¡Evaluación completada! 💾 **+10 minutos guardados automáticamente en tu progreso.**")
                     st.markdown("---")
 
                     mode = res.get("mode", "conversational")
@@ -788,6 +816,27 @@ elif menu == "🤖 Evaluador Gemini IA":
                         if ch:
                             st.info(f"🎯 **Tu mini-reto:** {ch}")
 
+    st.markdown("---")
+    st.subheader("📜 Tus Evaluaciones Recientes con Gemini IA")
+    u_evals = get_user_evaluations(curr_user["id"])
+    if u_evals:
+        for idx, ev in enumerate(reversed(u_evals[-6:]), 1):
+            ev_ts = format_user_timestamp(ev.get("timestamp", ""), curr_tz)
+            ev_type = ev.get("type", "General").replace("_", " ").capitalize()
+            ev_m = ev.get("metrics", {})
+            ev_score = ev_m.get("overall_score", ev_m.get("overall_band", "OK"))
+            ev_cefr = ev_m.get("cefr_level", "B1")
+            with st.expander(f"{idx}. 🕒 {ev_ts} • {ev_type} (Nivel {ev_cefr} | Score: {ev_score})"):
+                st.markdown(f"**Tu práctica:**\n> {ev.get('input_text')}")
+                if "natural_rewrite" in ev_m and ev_m["natural_rewrite"]:
+                    st.success(f"**Versión natural recomendada:** {ev_m['natural_rewrite']}")
+                elif "c1_rewrite" in ev_m and ev_m["c1_rewrite"]:
+                    st.code(ev_m["c1_rewrite"], language="text")
+                if "praise" in ev_m and ev_m["praise"]:
+                    st.caption(f"🌟 {ev_m['praise']}")
+    else:
+        st.caption("Aún no tienes evaluaciones registradas con Gemini. ¡Graba un audio o escribe un texto para comenzar!")
+
 # ==============================================================================
 # PANTALLA 4: BIBLIOTECA DE TEMAS
 # ==============================================================================
@@ -821,6 +870,18 @@ elif menu == "👤 Mi Perfil & Gustos":
 
         p_target = st.number_input("Tu Meta de Horas Totales:", min_value=10.0, max_value=2000.0, value=float(curr_user.get("target_hours", 100.0)), step=25.0)
 
+        user_curr_tz = curr_user.get("timezone", DEFAULT_TIMEZONE)
+        tz_keys = list(SUPPORTED_TIMEZONES.keys())
+        tz_idx = tz_keys.index(user_curr_tz) if user_curr_tz in tz_keys else 0
+        p_tz = st.selectbox(
+            "🌍 Tu Zona Horaria / Región:",
+            options=tz_keys,
+            index=tz_idx,
+            format_func=lambda k: SUPPORTED_TIMEZONES[k]
+        )
+        preview_dt = get_user_now(p_tz)
+        st.caption(f"🕒 Hora local en tu región: **{preview_dt.strftime('%I:%M %p')}** • Fecha: **{preview_dt.strftime('%d/%m/%Y')}**")
+
         st.write("**Tus Temas de Interés (La IA usará esto para proponerte ejercicios):**")
         all_possible = ["Viajes & Turismo", "Cine & Series", "Trabajo & Negocios", "Música & Cultura", "Tecnología & Programación", "Gastronomía & Cafés", "Deportes & Salud", "Ciencia & Física", "Videojuegos", "Moda & Arte"]
         user_ints = curr_user.get("interests", [])
@@ -833,8 +894,8 @@ elif menu == "👤 Mi Perfil & Gustos":
 
         submit_p = st.form_submit_button("💾 Guardar Mi Perfil", use_container_width=True)
         if submit_p:
-            update_user_profile(curr_user["id"], p_name, p_emoji, p_track, p_target, new_ints)
-            st.success("¡Perfil y preferencias actualizadas exitosamente!")
+            update_user_profile(curr_user["id"], p_name, p_emoji, p_track, p_target, new_ints, timezone_str=p_tz)
+            st.success("¡Perfil, zona horaria y preferencias actualizadas exitosamente!")
             time.sleep(1)
             st.rerun()
 

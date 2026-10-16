@@ -89,9 +89,15 @@ def evaluate_submission(submission_type: str, text: str):
     raw_text = clean_json_text(response.text)
     result = json.loads(raw_text)
     
+    try:
+        from users_manager import get_user_now
+        now_iso = get_user_now().isoformat()
+    except Exception:
+        now_iso = datetime.now().isoformat()
+
     # Registro local persistente en logs/study_log.json
     log_entry = {
-        "timestamp": datetime.now().isoformat(),
+        "timestamp": now_iso,
         "type": submission_type,
         "input_text": text,
         "metrics": result
